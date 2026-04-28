@@ -227,6 +227,15 @@ tbody td { padding:11px 12px; font-size:13px; color:var(--text); }
 .config-status { font-size:11px; color:var(--text2); margin-top:8px; min-height:14px; }
 .btn-load { width:100%; background:var(--teal); color:#030e0c; border:none; border-radius:8px; padding:13px; font-family:var(--font-head); font-size:14px; font-weight:700; text-transform:uppercase; letter-spacing:0.06em; cursor:pointer; transition:all 0.2s; margin-top:8px; }
 .btn-load:hover { background:var(--teal2); transform:translateY(-1px); }
+.rule-setup-row { display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:10px; }
+.rule-setup-title { font-family:var(--font-mono); font-size:10px; text-transform:uppercase; letter-spacing:0.08em; color:var(--text2); }
+.modal-overlay { position:fixed; inset:0; background:rgba(3,8,16,0.72); z-index:500; display:none; align-items:center; justify-content:center; padding:20px; }
+.modal-box { width:min(1080px, 95vw); max-height:88vh; overflow:auto; background:var(--surface); border:1px solid var(--border2); border-radius:12px; padding:18px; box-shadow:0 20px 60px rgba(0,0,0,.45); }
+.modal-head { display:flex; align-items:flex-start; justify-content:space-between; gap:10px; margin-bottom:10px; }
+.modal-title { font-family:var(--font-head); font-size:16px; font-weight:700; color:var(--white); }
+.modal-sub { font-size:12px; color:var(--text2); margin-top:3px; }
+.btn-modal-close { border:1px solid var(--border2); background:transparent; color:var(--text2); border-radius:6px; padding:6px 10px; cursor:pointer; font-family:var(--font-mono); font-size:10px; text-transform:uppercase; letter-spacing:0.08em; }
+.btn-modal-close:hover { border-color:var(--teal); color:var(--teal); }
 .config-steps { display:flex; flex-direction:column; gap:8px; margin-bottom:24px; }
 .config-step { display:flex; align-items:flex-start; gap:10px; }
 .step-num { width:22px; height:22px; background:var(--teal-dim); border:1px solid rgba(0,201,177,0.3); border-radius:50%; display:flex; align-items:center; justify-content:center; font-family:var(--font-mono); font-size:10px; color:var(--teal); flex-shrink:0; margin-top:1px; }
@@ -312,57 +321,10 @@ tbody td { padding:11px 12px; font-size:13px; color:var(--text); }
       </div>
       <div class="stage-config-wrap">
         <div class="stage-config-title">Validação de leads</div>
-        <div class="config-hint" style="margin-bottom:10px;">Configure a regra de contagem por métrica (tipo tabela).</div>
-        <div class="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Métrica</th>
-                <th>Tipo de contagem</th>
-                <th>Coluna filtro</th>
-                <th>Valor filtro</th>
-                <th>Somente tráfego</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <td class="td-mono">Lead</td>
-                <td>
-                  <select class="sort-select" id="ruleLeadMode">
-                    <option value="count_all">Contagem simples</option>
-                    <option value="count_filtered">Contagem com filtro</option>
-                  </select>
-                </td>
-                <td><input class="funnel-input" id="ruleLeadColumn" placeholder="Ex: status"></td>
-                <td><input class="funnel-input" id="ruleLeadValue" placeholder="Ex: lead"></td>
-                <td>
-                  <label class="toggle-switch" style="margin-left:0;">
-                    <input type="checkbox" id="ruleLeadRequirePaid" checked>
-                    <span class="toggle-track"><span class="toggle-thumb"></span></span>
-                    <span class="toggle-label">UTM</span>
-                  </label>
-                </td>
-              </tr>
-              <tr>
-                <td class="td-mono">Lead Qualificado (MQL)</td>
-                <td>
-                  <select class="sort-select" id="ruleMqlMode">
-                    <option value="count_all">Contagem simples</option>
-                    <option value="count_filtered">Contagem com filtro</option>
-                  </select>
-                </td>
-                <td><input class="funnel-input" id="ruleMqlColumn" placeholder="Ex: qualificação"></td>
-                <td><input class="funnel-input" id="ruleMqlValue" placeholder="Ex: qualificado"></td>
-                <td>
-                  <label class="toggle-switch" style="margin-left:0;">
-                    <input type="checkbox" id="ruleMqlRequirePaid" checked>
-                    <span class="toggle-track"><span class="toggle-thumb"></span></span>
-                    <span class="toggle-label">UTM</span>
-                  </label>
-                </td>
-              </tr>
-            </tbody>
-          </table>
+        <div class="config-hint">Configure contagens e filtros em uma tela dedicada.</div>
+        <div class="rule-setup-row">
+          <span class="rule-setup-title">Regras de contagem por métrica</span>
+          <button type="button" class="btn-stage-add" onclick="openMetricRulesModal()">Configurar regras</button>
         </div>
       </div>
       <div class="config-field">
@@ -406,6 +368,42 @@ tbody td { padding:11px 12px; font-size:13px; color:var(--text); }
       <button type="button" class="btn-ghost" id="btnShortLink" onclick="generateShortShareLink()">Gerar link curto</button>
       <div class="config-status" id="shortLinkStatus"></div>
       <button class="btn-load" onclick="saveConfigAndLoad()">Carregar Dashboard →</button>
+    </div>
+  </div>
+
+  <div id="metricRulesModal" class="modal-overlay" onclick="onMetricRulesOverlayClick(event)">
+    <div class="modal-box">
+      <div class="modal-head">
+        <div>
+          <div class="modal-title">Configurar regras de métricas</div>
+          <div class="modal-sub">Defina como cada métrica é contada. Você pode usar contagem simples ou aplicar filtro por coluna/valor.</div>
+        </div>
+        <button type="button" class="btn-modal-close" onclick="closeMetricRulesModal()">Fechar</button>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Métrica</th>
+              <th>Tipo de contagem</th>
+              <th>Coluna filtro</th>
+              <th>Valor filtro</th>
+              <th>Somente tráfego</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td class="td-mono">Lead</td><td><select class="sort-select" id="ruleLeadMode"><option value="count_all">Contagem simples</option><option value="count_filtered">Contagem com filtro</option></select></td><td><input class="funnel-input" id="ruleLeadColumn" placeholder="Ex: status"></td><td><input class="funnel-input" id="ruleLeadValue" placeholder="Ex: lead"></td><td><label class="toggle-switch" style="margin-left:0;"><input type="checkbox" id="ruleLeadRequirePaid" checked><span class="toggle-track"><span class="toggle-thumb"></span></span><span class="toggle-label">UTM</span></label></td></tr>
+            <tr><td class="td-mono">Lead Qualificado (MQL)</td><td><select class="sort-select" id="ruleMqlMode"><option value="count_all">Contagem simples</option><option value="count_filtered">Contagem com filtro</option></select></td><td><input class="funnel-input" id="ruleMqlColumn" placeholder="Ex: qualificacao"></td><td><input class="funnel-input" id="ruleMqlValue" placeholder="Ex: qualificado"></td><td><label class="toggle-switch" style="margin-left:0;"><input type="checkbox" id="ruleMqlRequirePaid" checked><span class="toggle-track"><span class="toggle-thumb"></span></span><span class="toggle-label">UTM</span></label></td></tr>
+            <tr><td class="td-mono">Contato de Confirmação</td><td><select class="sort-select" id="ruleAgendadaMode"><option value="count_all">Contagem simples</option><option value="count_filtered">Contagem com filtro</option></select></td><td><input class="funnel-input" id="ruleAgendadaColumn" placeholder="Ex: status"></td><td><input class="funnel-input" id="ruleAgendadaValue" placeholder="Ex: contato"></td><td><label class="toggle-switch" style="margin-left:0;"><input type="checkbox" id="ruleAgendadaRequirePaid" checked><span class="toggle-track"><span class="toggle-thumb"></span></span><span class="toggle-label">UTM</span></label></td></tr>
+            <tr><td class="td-mono">Call Confirmada</td><td><select class="sort-select" id="ruleConfirmadaMode"><option value="count_all">Contagem simples</option><option value="count_filtered">Contagem com filtro</option></select></td><td><input class="funnel-input" id="ruleConfirmadaColumn" placeholder="Ex: status"></td><td><input class="funnel-input" id="ruleConfirmadaValue" placeholder="Ex: confirmada"></td><td><label class="toggle-switch" style="margin-left:0;"><input type="checkbox" id="ruleConfirmadaRequirePaid" checked><span class="toggle-track"><span class="toggle-thumb"></span></span><span class="toggle-label">UTM</span></label></td></tr>
+            <tr><td class="td-mono">No-Show</td><td><select class="sort-select" id="ruleNoShowMode"><option value="count_all">Contagem simples</option><option value="count_filtered">Contagem com filtro</option></select></td><td><input class="funnel-input" id="ruleNoShowColumn" placeholder="Ex: status"></td><td><input class="funnel-input" id="ruleNoShowValue" placeholder="Ex: no-show"></td><td><label class="toggle-switch" style="margin-left:0;"><input type="checkbox" id="ruleNoShowRequirePaid" checked><span class="toggle-track"><span class="toggle-thumb"></span></span><span class="toggle-label">UTM</span></label></td></tr>
+            <tr><td class="td-mono">Call Feita</td><td><select class="sort-select" id="ruleCallFeitaMode"><option value="count_all">Contagem simples</option><option value="count_filtered">Contagem com filtro</option></select></td><td><input class="funnel-input" id="ruleCallFeitaColumn" placeholder="Ex: status"></td><td><input class="funnel-input" id="ruleCallFeitaValue" placeholder="Ex: call feita"></td><td><label class="toggle-switch" style="margin-left:0;"><input type="checkbox" id="ruleCallFeitaRequirePaid" checked><span class="toggle-track"><span class="toggle-thumb"></span></span><span class="toggle-label">UTM</span></label></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div style="display:flex;justify-content:flex-end;margin-top:12px;">
+        <button type="button" class="btn-load" style="max-width:240px;margin-top:0;" onclick="closeMetricRulesModal()">Salvar e fechar</button>
+      </div>
     </div>
   </div>
 
@@ -888,6 +886,15 @@ function getTrafficKey() {
   return `${TRAFFIC_KEY}:${CLIENT_KEY}`;
 }
 
+function resolveMetricRule(raw, fallback) {
+  return {
+    mode: raw?.mode === 'count_filtered' ? 'count_filtered' : 'count_all',
+    filterColumn: String(raw?.filterColumn || fallback.filterColumn || ''),
+    filterValue: String(raw?.filterValue || fallback.filterValue || ''),
+    requirePaidCampaign: raw?.requirePaidCampaign !== false
+  };
+}
+
 function applyTenantFromInput(syncUrl = false) {
   const inp = document.getElementById('tenantKey');
   CLIENT_KEY = normalizeClientKey(inp?.value || CLIENT_KEY);
@@ -928,6 +935,30 @@ const DEFAULT_METRIC_RULES = {
     filterColumn: 'qualificacao',
     filterValue: 'qualificado',
     requirePaidCampaign: true
+  },
+  agendada: {
+    mode: 'count_all',
+    filterColumn: '',
+    filterValue: '',
+    requirePaidCampaign: true
+  },
+  confirmada: {
+    mode: 'count_all',
+    filterColumn: '',
+    filterValue: '',
+    requirePaidCampaign: true
+  },
+  noShow: {
+    mode: 'count_all',
+    filterColumn: '',
+    filterValue: '',
+    requirePaidCampaign: true
+  },
+  callFeita: {
+    mode: 'count_all',
+    filterColumn: '',
+    filterValue: '',
+    requirePaidCampaign: true
   }
 };
 let METRIC_RULES = JSON.parse(JSON.stringify(DEFAULT_METRIC_RULES));
@@ -942,18 +973,12 @@ try {
   if (saved.gidAds)    GID_ADS    = saved.gidAds;
   if (saved.metricRules && typeof saved.metricRules === 'object') {
     METRIC_RULES = {
-      lead: {
-        mode: saved.metricRules?.lead?.mode === 'count_filtered' ? 'count_filtered' : 'count_all',
-        filterColumn: String(saved.metricRules?.lead?.filterColumn || ''),
-        filterValue: String(saved.metricRules?.lead?.filterValue || ''),
-        requirePaidCampaign: saved.metricRules?.lead?.requirePaidCampaign !== false
-      },
-      mql: {
-        mode: saved.metricRules?.mql?.mode === 'count_all' ? 'count_all' : 'count_filtered',
-        filterColumn: String(saved.metricRules?.mql?.filterColumn || 'qualificacao'),
-        filterValue: String(saved.metricRules?.mql?.filterValue || 'qualificado'),
-        requirePaidCampaign: saved.metricRules?.mql?.requirePaidCampaign !== false
-      }
+      lead: resolveMetricRule(saved.metricRules?.lead, DEFAULT_METRIC_RULES.lead),
+      mql: resolveMetricRule(saved.metricRules?.mql, DEFAULT_METRIC_RULES.mql),
+      agendada: resolveMetricRule(saved.metricRules?.agendada, DEFAULT_METRIC_RULES.agendada),
+      confirmada: resolveMetricRule(saved.metricRules?.confirmada, DEFAULT_METRIC_RULES.confirmada),
+      noShow: resolveMetricRule(saved.metricRules?.noShow, DEFAULT_METRIC_RULES.noShow),
+      callFeita: resolveMetricRule(saved.metricRules?.callFeita, DEFAULT_METRIC_RULES.callFeita)
     };
   } else if (saved.leadRules && typeof saved.leadRules === 'object') {
     const fallbackCol = Array.isArray(saved.leadRules.fieldAliases) && saved.leadRules.fieldAliases.length
@@ -969,7 +994,11 @@ try {
         filterValue: fallbackVal,
         requirePaidCampaign: saved.leadRules.requirePaidCampaign !== false
       },
-      mql: { ...DEFAULT_METRIC_RULES.mql }
+      mql: { ...DEFAULT_METRIC_RULES.mql },
+      agendada: { ...DEFAULT_METRIC_RULES.agendada },
+      confirmada: { ...DEFAULT_METRIC_RULES.confirmada },
+      noShow: { ...DEFAULT_METRIC_RULES.noShow },
+      callFeita: { ...DEFAULT_METRIC_RULES.callFeita }
     };
   }
   if (saved.activeFunnelId) activeFunnelId = String(saved.activeFunnelId);
@@ -1200,6 +1229,30 @@ function buildSharePayload() {
           METRIC_RULES.mql.filterColumn,
           METRIC_RULES.mql.filterValue,
           METRIC_RULES.mql.requirePaidCampaign !== false ? 1 : 0
+        ],
+        [
+          METRIC_RULES.agendada.mode,
+          METRIC_RULES.agendada.filterColumn,
+          METRIC_RULES.agendada.filterValue,
+          METRIC_RULES.agendada.requirePaidCampaign !== false ? 1 : 0
+        ],
+        [
+          METRIC_RULES.confirmada.mode,
+          METRIC_RULES.confirmada.filterColumn,
+          METRIC_RULES.confirmada.filterValue,
+          METRIC_RULES.confirmada.requirePaidCampaign !== false ? 1 : 0
+        ],
+        [
+          METRIC_RULES.noShow.mode,
+          METRIC_RULES.noShow.filterColumn,
+          METRIC_RULES.noShow.filterValue,
+          METRIC_RULES.noShow.requirePaidCampaign !== false ? 1 : 0
+        ],
+        [
+          METRIC_RULES.callFeita.mode,
+          METRIC_RULES.callFeita.filterColumn,
+          METRIC_RULES.callFeita.filterValue,
+          METRIC_RULES.callFeita.requirePaidCampaign !== false ? 1 : 0
         ]
       ]
     ],
@@ -1257,19 +1310,17 @@ try {
     if (Array.isArray(c[8])) {
       const lead = Array.isArray(c[8][0]) ? c[8][0] : [];
       const mql = Array.isArray(c[8][1]) ? c[8][1] : [];
+      const agendada = Array.isArray(c[8][2]) ? c[8][2] : [];
+      const confirmada = Array.isArray(c[8][3]) ? c[8][3] : [];
+      const noShow = Array.isArray(c[8][4]) ? c[8][4] : [];
+      const callFeita = Array.isArray(c[8][5]) ? c[8][5] : [];
       METRIC_RULES = {
-        lead: {
-          mode: lead[0] === 'count_filtered' ? 'count_filtered' : 'count_all',
-          filterColumn: String(lead[1] || ''),
-          filterValue: String(lead[2] || ''),
-          requirePaidCampaign: Number(lead[3]) !== 0
-        },
-        mql: {
-          mode: mql[0] === 'count_all' ? 'count_all' : 'count_filtered',
-          filterColumn: String(mql[1] || 'qualificacao'),
-          filterValue: String(mql[2] || 'qualificado'),
-          requirePaidCampaign: Number(mql[3]) !== 0
-        }
+        lead: resolveMetricRule({ mode: lead[0], filterColumn: lead[1], filterValue: lead[2], requirePaidCampaign: Number(lead[3]) !== 0 }, DEFAULT_METRIC_RULES.lead),
+        mql: resolveMetricRule({ mode: mql[0], filterColumn: mql[1], filterValue: mql[2], requirePaidCampaign: Number(mql[3]) !== 0 }, DEFAULT_METRIC_RULES.mql),
+        agendada: resolveMetricRule({ mode: agendada[0], filterColumn: agendada[1], filterValue: agendada[2], requirePaidCampaign: Number(agendada[3]) !== 0 }, DEFAULT_METRIC_RULES.agendada),
+        confirmada: resolveMetricRule({ mode: confirmada[0], filterColumn: confirmada[1], filterValue: confirmada[2], requirePaidCampaign: Number(confirmada[3]) !== 0 }, DEFAULT_METRIC_RULES.confirmada),
+        noShow: resolveMetricRule({ mode: noShow[0], filterColumn: noShow[1], filterValue: noShow[2], requirePaidCampaign: Number(noShow[3]) !== 0 }, DEFAULT_METRIC_RULES.noShow),
+        callFeita: resolveMetricRule({ mode: callFeita[0], filterColumn: callFeita[1], filterValue: callFeita[2], requirePaidCampaign: Number(callFeita[3]) !== 0 }, DEFAULT_METRIC_RULES.callFeita)
       };
     }
     if (c[5]) activeFunnelId = String(c[5]);
@@ -1434,43 +1485,69 @@ function fillConfigInputsFromGlobals() {
   document.getElementById('gidAds').value = GID_ADS;
   document.getElementById('defaultCampContains').value = campaignContains;
   document.getElementById('campContains').value = campaignContains;
-  const leadMode = document.getElementById('ruleLeadMode');
-  const leadCol = document.getElementById('ruleLeadColumn');
-  const leadVal = document.getElementById('ruleLeadValue');
-  const leadPaid = document.getElementById('ruleLeadRequirePaid');
-  const mqlMode = document.getElementById('ruleMqlMode');
-  const mqlCol = document.getElementById('ruleMqlColumn');
-  const mqlVal = document.getElementById('ruleMqlValue');
-  const mqlPaid = document.getElementById('ruleMqlRequirePaid');
-
-  if (leadMode) leadMode.value = METRIC_RULES.lead.mode;
-  if (leadCol) leadCol.value = METRIC_RULES.lead.filterColumn;
-  if (leadVal) leadVal.value = METRIC_RULES.lead.filterValue;
-  if (leadPaid) leadPaid.checked = METRIC_RULES.lead.requirePaidCampaign !== false;
-  if (mqlMode) mqlMode.value = METRIC_RULES.mql.mode;
-  if (mqlCol) mqlCol.value = METRIC_RULES.mql.filterColumn;
-  if (mqlVal) mqlVal.value = METRIC_RULES.mql.filterValue;
-  if (mqlPaid) mqlPaid.checked = METRIC_RULES.mql.requirePaidCampaign !== false;
+  const ids = [
+    ['lead', 'Lead'],
+    ['mql', 'Mql'],
+    ['agendada', 'Agendada'],
+    ['confirmada', 'Confirmada'],
+    ['noShow', 'NoShow'],
+    ['callFeita', 'CallFeita']
+  ];
+  ids.forEach(([key, suffix]) => {
+    const rule = METRIC_RULES[key] || DEFAULT_METRIC_RULES[key];
+    const mode = document.getElementById(`rule${suffix}Mode`);
+    const col = document.getElementById(`rule${suffix}Column`);
+    const val = document.getElementById(`rule${suffix}Value`);
+    const paid = document.getElementById(`rule${suffix}RequirePaid`);
+    if (mode) mode.value = rule.mode;
+    if (col) col.value = rule.filterColumn;
+    if (val) val.value = rule.filterValue;
+    if (paid) paid.checked = rule.requirePaidCampaign !== false;
+  });
   renderStageConfigs();
 }
 
 function syncMetricRulesFromConfigInputs() {
-  METRIC_RULES = {
-    lead: {
-      mode: document.getElementById('ruleLeadMode')?.value === 'count_filtered' ? 'count_filtered' : 'count_all',
-      filterColumn: String(document.getElementById('ruleLeadColumn')?.value || '').trim(),
-      filterValue: String(document.getElementById('ruleLeadValue')?.value || '').trim(),
-      requirePaidCampaign: !!document.getElementById('ruleLeadRequirePaid')?.checked
-    },
-    mql: {
-      mode: document.getElementById('ruleMqlMode')?.value === 'count_all' ? 'count_all' : 'count_filtered',
-      filterColumn: String(document.getElementById('ruleMqlColumn')?.value || '').trim(),
-      filterValue: String(document.getElementById('ruleMqlValue')?.value || '').trim(),
-      requirePaidCampaign: !!document.getElementById('ruleMqlRequirePaid')?.checked
-    }
-  };
-  if (!METRIC_RULES.mql.filterColumn) METRIC_RULES.mql.filterColumn = 'qualificacao';
-  if (!METRIC_RULES.mql.filterValue) METRIC_RULES.mql.filterValue = 'qualificado';
+  const ids = [
+    ['lead', 'Lead'],
+    ['mql', 'Mql'],
+    ['agendada', 'Agendada'],
+    ['confirmada', 'Confirmada'],
+    ['noShow', 'NoShow'],
+    ['callFeita', 'CallFeita']
+  ];
+  const next = {};
+  ids.forEach(([key, suffix]) => {
+    const fallback = DEFAULT_METRIC_RULES[key];
+    const raw = {
+      mode: document.getElementById(`rule${suffix}Mode`)?.value || fallback.mode,
+      filterColumn: String(document.getElementById(`rule${suffix}Column`)?.value || '').trim(),
+      filterValue: String(document.getElementById(`rule${suffix}Value`)?.value || '').trim(),
+      requirePaidCampaign: !!document.getElementById(`rule${suffix}RequirePaid`)?.checked
+    };
+    next[key] = resolveMetricRule(raw, fallback);
+  });
+  METRIC_RULES = next;
+}
+
+function openMetricRulesModal() {
+  syncGlobalsFromConfigInputs();
+  fillConfigInputsFromGlobals();
+  const modal = document.getElementById('metricRulesModal');
+  if (modal) modal.style.display = 'flex';
+}
+
+function closeMetricRulesModal() {
+  syncMetricRulesFromConfigInputs();
+  syncGlobalsToActiveFunnel();
+  persistConfigState();
+  const modal = document.getElementById('metricRulesModal');
+  if (modal) modal.style.display = 'none';
+}
+
+function onMetricRulesOverlayClick(e) {
+  const modal = document.getElementById('metricRulesModal');
+  if (e?.target === modal) closeMetricRulesModal();
 }
 
 function onDefaultCampaignPatternChange(value) {
@@ -2560,12 +2637,22 @@ function getStageRowsByAliases(aliases) {
   return out;
 }
 
-function countStageInPeriod(rows, filters) {
+function getRowsForMetricKey(metricKey) {
+  if (metricKey === 'lead' || metricKey === 'mql') return getTrafficLeadRows();
+  if (metricKey === 'agendada') return getStageRowsByAliases(['Contato de Confirmacao', 'Contato de Confirmação']);
+  if (metricKey === 'confirmada') return getStageRowsByAliases(['Call Confirmada', 'Reuniao Confirmada', 'Reunião Confirmada']);
+  if (metricKey === 'noShow') return getStageRowsByAliases(['No-Show', 'No Show']);
+  if (metricKey === 'callFeita') return getStageRowsByAliases(['Call Feita']);
+  return [];
+}
+
+function countStageInPeriod(rows, filters, metricKey = 'lead') {
   if (!rows.length) return 0;
   const dateCol = getTrafficLeadDateCol(rows);
+  const rule = METRIC_RULES[metricKey] || DEFAULT_METRIC_RULES.lead;
   let count = 0;
   rows.forEach(r => {
-    if (!isLeadRow(r)) return;
+    if (!rowMatchesMetricRule(r, rule)) return;
     if (dateCol) {
       const d = parseDate(r[dateCol]);
       if (!inPeriod(d)) return;
@@ -2863,9 +2950,11 @@ function renderTopLeadBlocks(adsRows) {
       map[key].clicks += getClicks(r);
     });
 
-    function addCount(rows, field) {
+    function addCount(rows, field, metricKey) {
       const rowDateCol = getTrafficLeadDateCol(rows);
+      const rule = METRIC_RULES[metricKey] || DEFAULT_METRIC_RULES.lead;
       rows.forEach(r => {
+        if (!rowMatchesMetricRule(r, rule)) return;
         const utmVal = getLevelConvKey(r);
         if (!utmVal || utmVal === '-' || utmVal.startsWith('{{')) return;
         if (rowDateCol) {
@@ -2877,19 +2966,20 @@ function renderTopLeadBlocks(adsRows) {
       });
     }
 
-    const mqlRows = leadRows.filter(isMqlRow);
-    const agRows = getStageRowsByAliases(['Contato de Confirmacao', 'Contato de Confirmação']);
-    const confRows = getStageRowsByAliases(['Call Confirmada', 'Reuniao Confirmada', 'Reunião Confirmada']);
-    const noShowRows = getStageRowsByAliases(['No-Show', 'No Show']);
-    const callRows = getStageRowsByAliases(['Call Feita']);
+    const mqlRows = getRowsForMetricKey('mql');
+    const agRows = getRowsForMetricKey('agendada');
+    const confRows = getRowsForMetricKey('confirmada');
+    const noShowRows = getRowsForMetricKey('noShow');
+    const callRows = getRowsForMetricKey('callFeita');
 
-    addCount(mqlRows, 'mql');
-    addCount(agRows, 'agendada');
-    addCount(confRows, 'confirmada');
-    addCount(noShowRows, 'noShow');
-    addCount(callRows, 'callFeita');
+    addCount(mqlRows, 'mql', 'mql');
+    addCount(agRows, 'agendada', 'agendada');
+    addCount(confRows, 'confirmada', 'confirmada');
+    addCount(noShowRows, 'noShow', 'noShow');
+    addCount(callRows, 'callFeita', 'callFeita');
 
     leadRows.forEach(r => {
+      if (!isLeadRow(r)) return;
       const utmVal = getLevelConvKey(r);
       if (!utmVal || utmVal === '-' || utmVal.startsWith('{{')) return;
       if (dateCol) {
@@ -3203,27 +3293,15 @@ function renderTrafego() {
   const cpl      = leads > 0 && spend > 0 ? spend / leads : 0;
   const cpmql    = mql > 0 && spend > 0 ? spend / mql : 0;
   const convRate = clicks > 0 && leads > 0 ? leads / clicks * 100 : 0;
-  const agendadas = countStageInPeriod(
-    getStageRowsByAliases(['Contato de Confirmacao', 'Contato de Confirmação']),
-    { fCamp, fAdset, fAd, campPattern }
-  );
-  const confirmadas = countStageInPeriod(
-    getStageRowsByAliases(['Call Confirmada', 'Reuniao Confirmada', 'Reunião Confirmada']),
-    { fCamp, fAdset, fAd, campPattern }
-  );
-  const callFeita = countStageInPeriod(
-    getStageRowsByAliases(['Call Feita']),
-    { fCamp, fAdset, fAd, campPattern }
-  );
+  const agendadas = countStageInPeriod(getRowsForMetricKey('agendada'), { fCamp, fAdset, fAd, campPattern }, 'agendada');
+  const confirmadas = countStageInPeriod(getRowsForMetricKey('confirmada'), { fCamp, fAdset, fAd, campPattern }, 'confirmada');
+  const callFeita = countStageInPeriod(getRowsForMetricKey('callFeita'), { fCamp, fAdset, fAd, campPattern }, 'callFeita');
   const txQualificacao = leads > 0 && mql > 0 ? (mql / leads * 100) : 0;
   const txMqlToContato = mql > 0 && agendadas > 0 ? (agendadas / mql * 100) : 0;
   const txContatoToConfirmada = agendadas > 0 && confirmadas > 0 ? (confirmadas / agendadas * 100) : 0;
   const txConfirmadaToCallFeita = confirmadas > 0 && callFeita > 0 ? (callFeita / confirmadas * 100) : 0;
   const connectRate = clicks > 0 && lpv > 0 ? (lpv / clicks * 100) : 0;
-  const noShow = countStageInPeriod(
-    getStageRowsByAliases(['No-Show', 'No Show']),
-    { fCamp, fAdset, fAd, campPattern }
-  );
+  const noShow = countStageInPeriod(getRowsForMetricKey('noShow'), { fCamp, fAdset, fAd, campPattern }, 'noShow');
   const txNoShow = confirmadas > 0 && noShow > 0 ? (noShow / confirmadas * 100) : 0;
   const custoContato = agendadas > 0 && spend > 0 ? spend / agendadas : 0;
   const custoConfirmada = confirmadas > 0 && spend > 0 ? spend / confirmadas : 0;
@@ -3425,13 +3503,13 @@ function renderTrafego() {
 //   utm_content  (conv) ↔ Adset Name   (gerenciador)
 //   utm_term     (conv) ↔ Ad Name       (gerenciador)
 function renderPerfTable(adsRows) {
-  const leadRows = getTrafficLeadRows();
+  const leadRows = getRowsForMetricKey('lead');
   const dateCol = getTrafficLeadDateCol(leadRows);
-  const mqlRows = leadRows.filter(isMqlRow);
-  const agRows = getStageRowsByAliases(['Contato de Confirmacao', 'Contato de Confirmação']);
-  const confRows = getStageRowsByAliases(['Call Confirmada', 'Reuniao Confirmada', 'Reunião Confirmada']);
-  const noShowRows = getStageRowsByAliases(['No-Show', 'No Show']);
-  const callRows = getStageRowsByAliases(['Call Feita']);
+  const mqlRows = getRowsForMetricKey('mql');
+  const agRows = getRowsForMetricKey('agendada');
+  const confRows = getRowsForMetricKey('confirmada');
+  const noShowRows = getRowsForMetricKey('noShow');
+  const callRows = getRowsForMetricKey('callFeita');
 
   const getConvUtmVal = currentLevel === 'campaign' ? getLeadUtmCampaign
                      : currentLevel === 'adset'    ? getLeadUtmContent
@@ -3460,9 +3538,11 @@ function renderPerfTable(adsRows) {
     map[key].lpv    += getLPV(r);
   });
 
-  function addCount(rows, field) {
+  function addCount(rows, field, metricKey) {
     const rowDateCol = getTrafficLeadDateCol(rows);
+    const rule = METRIC_RULES[metricKey] || DEFAULT_METRIC_RULES.lead;
     rows.forEach(r => {
+      if (!rowMatchesMetricRule(r, rule)) return;
       const utmVal = getConvUtmVal(r);
       if (!utmVal || utmVal === '-' || utmVal.startsWith('{{')) return;
       if (rowDateCol) {
@@ -3474,12 +3554,12 @@ function renderPerfTable(adsRows) {
     });
   }
 
-  addCount(leadRows, 'leads');
-  addCount(mqlRows, 'mql');
-  addCount(agRows, 'agendada');
-  addCount(confRows, 'confirmada');
-  addCount(noShowRows, 'noShow');
-  addCount(callRows, 'callFeita');
+  addCount(leadRows, 'leads', 'lead');
+  addCount(mqlRows, 'mql', 'mql');
+  addCount(agRows, 'agendada', 'agendada');
+  addCount(confRows, 'confirmada', 'confirmada');
+  addCount(noShowRows, 'noShow', 'noShow');
+  addCount(callRows, 'callFeita', 'callFeita');
 
   const getSortValue = (v) => {
     switch (perfSortMetric) {
