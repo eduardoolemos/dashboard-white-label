@@ -283,27 +283,32 @@ tbody td { padding:11px 12px; font-size:13px; color:var(--text); }
   <div id="configScreen" style="display:none; max-width:560px; margin:40px auto;">
     <div class="config-panel">
       <div class="config-title">Configurar Planilha</div>
-      <div class="config-sub">Para conectar o dashboard à sua planilha do Google Sheets, siga os passos abaixo:</div>
+      <div class="config-sub">Conecte via link da planilha. Para modo privado, compartilhe a planilha com o e-mail da Service Account.</div>
 
       <div class="config-steps">
         <div class="config-step">
           <div class="step-num">1</div>
-          <div class="step-txt">Abra a planilha e vá em <strong>Arquivo → Compartilhar → Publicar na web</strong></div>
+          <div class="step-txt">Se a planilha for <strong>privada</strong>, compartilhe com o e-mail da Service Account (somente leitura).</div>
         </div>
         <div class="config-step">
           <div class="step-num">2</div>
-          <div class="step-txt">Escolha <strong>Documento inteiro</strong> e formato <strong>CSV</strong>, clique em <strong>Publicar</strong></div>
+          <div class="step-txt">Cole o link da planilha abaixo. Pode ser link normal (<code>/d/&lt;id&gt;</code>) para acesso privado.</div>
         </div>
         <div class="config-step">
           <div class="step-num">3</div>
-          <div class="step-txt">Cole os <strong>GIDs</strong> de cada aba abaixo (número no final da URL ao clicar na aba)</div>
+          <div class="step-txt">Clique em <strong>Buscar GIDs automático</strong> para preencher os GIDs pelas abas da planilha</div>
         </div>
       </div>
 
       <div class="config-field">
-        <label>Link da planilha publicada (CSV ou Publicada na Web)</label>
-        <input type="text" id="sheetLink" placeholder="Cole aqui a URL publicada da planilha">
-        <div class="config-hint">Usado para carregar dados e buscar GIDs automaticamente.</div>
+        <label>Link da planilha (privada ou pública)</label>
+        <input type="text" id="sheetLink" placeholder="Cole aqui a URL da planilha do Google Sheets">
+        <div class="config-hint">Recomendado: planilha privada compartilhada com o e-mail da Service Account como leitor.</div>
+      </div>
+      <div class="config-field">
+        <label>Cliente (slug white-label)</label>
+        <input type="text" id="tenantKey" placeholder="Ex: evolving, cliente-x">
+        <div class="config-hint">Isola a configuração por cliente usando <code>?tenant=slug</code> na URL.</div>
       </div>
       <div class="config-field">
         <label>Página/Funil ativo</label>
@@ -800,6 +805,45 @@ let EXPORT_BASE    = SHEET_ID ? `https://docs.google.com/spreadsheets/d/${SHEET_
 
 const CFG_KEY = 'chippu_dash_cfg_v3';
 const TRAFFIC_KEY = 'chippu_dash_traffic_v1';
+const DEFAULT_TENANT_KEY = 'default';
+let CLIENT_KEY = DEFAULT_TENANT_KEY;
+
+function normalizeClientKey(v) {
+  return String(v || '')
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9-]+/g, '-')
+    .replace(/^-+|-+$/g, '') || DEFAULT_TENANT_KEY;
+}
+
+function getTenantFromUrl() {
+  try {
+    const qp = new URLSearchParams(window.location.search);
+    return normalizeClientKey(qp.get('tenant') || DEFAULT_TENANT_KEY);
+  } catch {
+    return DEFAULT_TENANT_KEY;
+  }
+}
+
+function getCfgKey() {
+  return `${CFG_KEY}:${CLIENT_KEY}`;
+}
+
+function getTrafficKey() {
+  return `${TRAFFIC_KEY}:${CLIENT_KEY}`;
+}
+
+function applyTenantFromInput(syncUrl = false) {
+  const inp = document.getElementById('tenantKey');
+  CLIENT_KEY = normalizeClientKey(inp?.value || CLIENT_KEY);
+  if (inp) inp.value = CLIENT_KEY;
+  if (!syncUrl) return;
+  try {
+    const u = new URL(window.location.href);
+    u.searchParams.set('tenant', CLIENT_KEY);
+    window.history.replaceState({}, '', u.toString());
+  } catch {}
+}
 
 let GID_ETAPAS = '';
 let GID_CONV   = '';
@@ -817,9 +861,10 @@ const DEFAULT_STAGE_CONFIGS = [
 let STAGE_CONFIGS = DEFAULT_STAGE_CONFIGS.map(s => ({ ...s }));
 let FUNNELS = [];
 let activeFunnelId = 'default';
+CLIENT_KEY = getTenantFromUrl();
 
 try {
-  const saved = JSON.parse(localStorage.getItem(CFG_KEY) || '{}');
+  const saved = JSON.parse(localStorage.getItem(getCfgKey()) || '{}');
   if (saved.sheetId) SHEET_ID = saved.sheetId;
   if (saved.publishedBase) PUBLISHED_BASE = saved.publishedBase;
   if (saved.gidEtapas) GID_ETAPAS = saved.gidEtapas;
@@ -1052,7 +1097,7 @@ function buildSharePayload() {
 }
 
 try {
-  const savedTraffic = JSON.parse(localStorage.getItem(TRAFFIC_KEY) || '{}');
+  const savedTraffic = JSON.parse(localStorage.getItem(getTrafficKey()) || '{}');
   campaignContains = (savedTraffic.campaignContains || '').trim();
   if (Array.isArray(savedTraffic.visibleMetrics) && savedTraffic.visibleMetrics.length) {
     visibleMetrics = new Set(savedTraffic.visibleMetrics.map(v => String(v || '').trim()).filter(Boolean));
@@ -1094,7 +1139,7 @@ try {
       FUNNELS = unpackFunnels(c[6]);
     }
     if (c[5]) activeFunnelId = String(c[5]);
-    localStorage.setItem(CFG_KEY, JSON.stringify({
+    localStorage.setItem(getCfgKey(), JSON.stringify({
       sheetId: SHEET_ID,
       publishedBase: PUBLISHED_BASE,
       gidEtapas: GID_ETAPAS,
@@ -1118,7 +1163,7 @@ try {
     }
     if (t.dailyValueMetric) dailyValueMetric = String(t.dailyValueMetric);
     if (t.dailyCostMetric) dailyCostMetric = String(t.dailyCostMetric);
-    localStorage.setItem(TRAFFIC_KEY, JSON.stringify({
+    localStorage.setItem(getTrafficKey(), JSON.stringify({
       campaignContains,
       visibleMetrics: Array.from(visibleMetrics),
       dailyValueMetric,
@@ -1153,7 +1198,7 @@ try {
       }));
     }
     if (c.activeFunnelId) activeFunnelId = String(c.activeFunnelId);
-    localStorage.setItem(CFG_KEY, JSON.stringify(c));
+    localStorage.setItem(getCfgKey(), JSON.stringify(c));
   }
   if (shared?.traffic) {
     const t = shared.traffic;
@@ -1163,7 +1208,7 @@ try {
     }
     if (t.dailyValueMetric) dailyValueMetric = String(t.dailyValueMetric);
     if (t.dailyCostMetric) dailyCostMetric = String(t.dailyCostMetric);
-    localStorage.setItem(TRAFFIC_KEY, JSON.stringify({
+    localStorage.setItem(getTrafficKey(), JSON.stringify({
       campaignContains,
       visibleMetrics: Array.from(visibleMetrics),
       dailyValueMetric,
@@ -1219,7 +1264,7 @@ function syncGlobalsToActiveFunnel() {
 
 function persistConfigState() {
   try {
-    localStorage.setItem(CFG_KEY, JSON.stringify({
+    localStorage.setItem(getCfgKey(), JSON.stringify({
       sheetId: SHEET_ID,
       publishedBase: PUBLISHED_BASE,
       gidEtapas: GID_ETAPAS,
@@ -1374,7 +1419,28 @@ function findBestGidByName(targetName, tabs) {
   return contains ? contains.gid : '';
 }
 
+async function fetchJsonOrThrow(url) {
+  const res = await fetch(url);
+  if (!res.ok) {
+    let msg = `Falha na requisição (${res.status})`;
+    try {
+      const body = await res.json();
+      msg = body?.error || body?.details || msg;
+    } catch {}
+    throw new Error(msg);
+  }
+  return res.json();
+}
+
 async function fetchSheetTabs() {
+  if (SHEET_ID) {
+    const url = `/api/sheets/tabs?spreadsheetId=${encodeURIComponent(SHEET_ID)}`;
+    const data = await fetchJsonOrThrow(url);
+    const tabs = Array.isArray(data?.tabs) ? data.tabs : [];
+    if (!tabs.length) throw new Error('Nenhuma aba encontrada via API do Google Sheets.');
+    return tabs;
+  }
+
   const pubHtmlUrl = PUBLISHED_BASE.replace('/pub?output=csv', '/pubhtml');
   const res = await fetch(pubHtmlUrl);
   if (!res.ok) throw new Error('Não foi possível ler abas da planilha publicada.');
@@ -1467,6 +1533,21 @@ async function autoFillGidsFromSheet() {
 // ── CSV FETCH ──────────────────────────
 async function fetchCSV(gid, useExport=false) {
   if (!gid && !useExport) throw new Error('GID da aba não informado.');
+  if (SHEET_ID) {
+    const url = `/api/sheets/csv?spreadsheetId=${encodeURIComponent(SHEET_ID)}&gid=${encodeURIComponent(gid)}`;
+    const res = await fetch(url);
+    if (!res.ok) {
+      let msg = 'Planilha privada não acessível.';
+      try {
+        const body = await res.json();
+        msg = body?.error || body?.details || msg;
+      } catch {}
+      throw new Error(msg);
+    }
+    const text = await res.text();
+    return parseCSV(text);
+  }
+
   const url = (useExport && EXPORT_BASE)
     ? EXPORT_BASE + '&gid=' + gid
     : PUBLISHED_BASE + '&gid=' + gid;
@@ -2414,7 +2495,7 @@ function onDailyMetricChange() {
   dailyValueMetric = document.getElementById('dailyValueMetric')?.value || dailyValueMetric;
   dailyCostMetric = document.getElementById('dailyCostMetric')?.value || dailyCostMetric;
   try {
-    localStorage.setItem(TRAFFIC_KEY, JSON.stringify({
+    localStorage.setItem(getTrafficKey(), JSON.stringify({
       campaignContains,
       visibleMetrics: Array.from(visibleMetrics),
       dailyValueMetric,
@@ -2735,7 +2816,7 @@ function renderTopLeadBlocks(adsRows) {
 function onCampaignContainsChange() {
   campaignContains = (document.getElementById('campContains')?.value || '').trim();
   try {
-    localStorage.setItem(TRAFFIC_KEY, JSON.stringify({
+    localStorage.setItem(getTrafficKey(), JSON.stringify({
       campaignContains,
       visibleMetrics: Array.from(visibleMetrics),
       dailyValueMetric,
@@ -2761,7 +2842,7 @@ function ensureVisibleMetricsNotEmpty() {
   if (visibleMetrics.size > 0) return false;
   visibleMetrics = new Set(DEFAULT_VISIBLE_METRICS);
   try {
-    localStorage.setItem(TRAFFIC_KEY, JSON.stringify({
+    localStorage.setItem(getTrafficKey(), JSON.stringify({
       campaignContains,
       visibleMetrics: Array.from(visibleMetrics),
       dailyValueMetric,
@@ -2800,7 +2881,7 @@ function onVisibleMetricsChange() {
   if (!selected.length) return;
   visibleMetrics = new Set(selected);
   try {
-    localStorage.setItem(TRAFFIC_KEY, JSON.stringify({
+    localStorage.setItem(getTrafficKey(), JSON.stringify({
       campaignContains,
       visibleMetrics: Array.from(visibleMetrics),
       dailyValueMetric,
@@ -2821,7 +2902,7 @@ function selectAllVisibleMetrics(event) {
   visibleMetrics = new Set(all);
   syncMetricChooserFromState();
   try {
-    localStorage.setItem(TRAFFIC_KEY, JSON.stringify({
+    localStorage.setItem(getTrafficKey(), JSON.stringify({
       campaignContains,
       visibleMetrics: Array.from(visibleMetrics),
       dailyValueMetric,
@@ -3309,12 +3390,26 @@ function syncGlobalsFromConfigInputs() {
   GID_ADS    = document.getElementById('gidAds').value.trim();
 }
 
-function saveConfigAndLoad() {
+function hasMissingMainGids() {
+  return !String(document.getElementById('gidEtapas')?.value || '').trim()
+    || !String(document.getElementById('gidConversoes')?.value || '').trim()
+    || !String(document.getElementById('gidAds')?.value || '').trim();
+}
+
+async function saveConfigAndLoad() {
+  applyTenantFromInput(true);
   const parsedSheet = parseSheetLink(document.getElementById('sheetLink').value);
   if (parsedSheet?.publishedBase) PUBLISHED_BASE = parsedSheet.publishedBase;
   if (parsedSheet?.sheetId) {
     SHEET_ID = parsedSheet.sheetId;
     EXPORT_BASE = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv`;
+  }
+  if (hasMissingMainGids()) {
+    try {
+      await autoFillGidsFromSheet();
+    } catch (e) {
+      console.warn('Falha no auto preenchimento de GIDs:', e);
+    }
   }
   syncGlobalsFromConfigInputs();
   STAGE_CONFIGS = STAGE_CONFIGS
@@ -3329,6 +3424,7 @@ function saveConfigAndLoad() {
 
 // ── INIT ────────────────────────────────
 document.getElementById('sheetLink').value     = PUBLISHED_BASE;
+document.getElementById('tenantKey').value     = CLIENT_KEY;
 document.getElementById('campContains').value  = campaignContains;
 document.getElementById('perfSortMetric').value = perfSortMetric;
 document.getElementById('topSortMetric').value = topSortMetric;
