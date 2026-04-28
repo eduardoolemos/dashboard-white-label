@@ -384,6 +384,15 @@ tbody td { padding:11px 12px; font-size:13px; color:var(--text); }
         <div class="config-hint">Cada página mantém seus próprios GIDs e etapas.</div>
       </div>
       <div class="config-field">
+        <label>Tipo de funil (métricas principais)</label>
+        <select class="camp-select" id="funnelTypeSelect" onchange="onFunnelTypeChange(this.value)">
+          <option value="sessao_estrategica">Sessão Estratégica</option>
+          <option value="isca_vendas">Isca de Vendas</option>
+          <option value="isca_gratuita">Isca Gratuita</option>
+        </select>
+        <div class="config-hint">Define quais KPIs principais aparecem no topo das métricas de tráfego para esta página.</div>
+      </div>
+      <div class="config-field">
         <label>GID da aba "TRACK ETAPAS"</label>
         <input type="text" id="gidEtapas" placeholder="0">
         <div class="config-hint">Tracking de etapas do funil</div>
@@ -1266,6 +1275,7 @@ try {
       gidEtapas: String(f.gidEtapas || ''),
       gidConv: String(f.gidConv || ''),
       gidAds: String(f.gidAds || ''),
+      funnelType: String(f.funnelType || 'sessao_estrategica'),
       defaultCampContains: String(f.defaultCampContains || ''),
       stageConfigs: Array.isArray(f.stageConfigs) ? f.stageConfigs.map(s => ({
         name: String(s?.name || '').trim(),
@@ -1291,6 +1301,7 @@ if (!FUNNELS.length) {
     gidEtapas: GID_ETAPAS,
     gidConv: GID_CONV,
     gidAds: GID_ADS,
+    funnelType: 'sessao_estrategica',
     defaultCampContains: '',
     stageConfigs: STAGE_CONFIGS.map(s => ({ ...s }))
   }];
@@ -1465,7 +1476,8 @@ function buildSharePayload() {
     String(f?.gidConv || ''),
     String(f?.gidAds || ''),
     String(f?.defaultCampContains || ''),
-    packStages(f?.stageConfigs || [])
+    packStages(f?.stageConfigs || []),
+    String(f?.funnelType || 'sessao_estrategica')
   ]));
   return {
     v: 2,
@@ -1567,7 +1579,8 @@ try {
     gidConv: String(f?.[3] || ''),
     gidAds: String(f?.[4] || ''),
     defaultCampContains: String(f?.[5] || ''),
-    stageConfigs: Array.isArray(f?.[6]) ? unpackStages(f[6]) : DEFAULT_STAGE_CONFIGS.map(s => ({ ...s }))
+    stageConfigs: Array.isArray(f?.[6]) ? unpackStages(f[6]) : DEFAULT_STAGE_CONFIGS.map(s => ({ ...s })),
+    funnelType: String(f?.[7] || 'sessao_estrategica')
   }));
 
   if (shared?.v === 2 && Array.isArray(shared?.c)) {
@@ -1668,6 +1681,7 @@ try {
         gidEtapas: String(f.gidEtapas || ''),
         gidConv: String(f.gidConv || ''),
         gidAds: String(f.gidAds || ''),
+        funnelType: String(f.funnelType || 'sessao_estrategica'),
         defaultCampContains: String(f.defaultCampContains || ''),
         stageConfigs: Array.isArray(f.stageConfigs) ? f.stageConfigs.map(s => ({
           name: String(s?.name || '').trim(),
@@ -1736,11 +1750,13 @@ function applyActiveFunnelToGlobals() {
 function syncGlobalsToActiveFunnel() {
   const idx = FUNNELS.findIndex(f => f.id === activeFunnelId);
   if (idx < 0) return;
+  const funnelType = String(document.getElementById('funnelTypeSelect')?.value || FUNNELS[idx].funnelType || 'sessao_estrategica');
   FUNNELS[idx] = {
     ...FUNNELS[idx],
     gidEtapas: String(GID_ETAPAS || ''),
     gidConv: String(GID_CONV || ''),
     gidAds: String(GID_ADS || ''),
+    funnelType,
     defaultCampContains: String(campaignContains || ''),
     stageConfigs: STAGE_CONFIGS.map(s => ({ ...s }))
   };
@@ -1786,6 +1802,9 @@ function fillConfigInputsFromGlobals() {
   if (brandNameInput) brandNameInput.value = BRAND_NAME;
   const metricsLinkInput = document.getElementById('sheetLinkConfig');
   if (metricsLinkInput) metricsLinkInput.value = METRICS_PUBLISHED_BASE || '';
+  const funnelTypeSel = document.getElementById('funnelTypeSelect');
+  const active = getActiveFunnel();
+  if (funnelTypeSel) funnelTypeSel.value = String(active?.funnelType || 'sessao_estrategica');
   document.getElementById('gidEtapas').value = GID_ETAPAS;
   document.getElementById('gidConversoes').value = GID_CONV;
   document.getElementById('gidAds').value = GID_ADS;
@@ -2292,6 +2311,18 @@ function onDefaultCampaignPatternChange(value) {
   persistConfigState();
 }
 
+function onFunnelTypeChange(value) {
+  const next = String(value || 'sessao_estrategica');
+  const idx = FUNNELS.findIndex(f => f.id === activeFunnelId);
+  if (idx < 0) return;
+  FUNNELS[idx] = {
+    ...FUNNELS[idx],
+    funnelType: next
+  };
+  persistConfigState();
+  renderTrafego();
+}
+
 function onConfigFunnelChange() {
   syncGlobalsFromConfigInputs();
   syncGlobalsToActiveFunnel();
@@ -2324,6 +2355,7 @@ function addFunnelPage() {
     gidEtapas: '',
     gidConv: '',
     gidAds: '',
+    funnelType: 'sessao_estrategica',
     defaultCampContains: '',
     stageConfigs: DEFAULT_STAGE_CONFIGS.map(s => ({ ...s }))
   });
@@ -3349,6 +3381,8 @@ function getSpend(r)     { return pn(r['Spend (Cost, Amount Spent)'] ?? r['Spend
 function getImp(r)       { return pn(r['Impressions'] ?? r['impressions']); }
 function getClicks(r)    { return pn(r['Action Link Clicks'] ?? r['Link Clicks'] ?? r['link_clicks']); }
 function getLPV(r)       { return pn(r['Action Landing Page View'] ?? r['Landing Page Views'] ?? r['landing_page_views']); }
+function getAddToCart(r) { return pn(r['Action Add to Cart'] ?? r['Add to Cart'] ?? r['Adds to Cart'] ?? r['add_to_cart']); }
+function getPurchase(r)  { return pn(r['Action Purchase'] ?? r['Purchases'] ?? r['purchase'] ?? r['compras'] ?? r['Compra']); }
 function getCampName(r)  { return (r['Campaign Name'] || r['campaign_name'] || r['Campanha'] || '').trim(); }
 function getAdsetName(r) { return (r['Adset Name']    || r['adset_name']    || r['Conjunto'] || '').trim(); }
 function getAdName(r)    { return (r['Ad Name']       || r['ad_name']       || r['Anuncio']  || r['Anúncio'] || '').trim(); }
@@ -4234,11 +4268,14 @@ function renderTrafego() {
 
   // Agrega métricas de ads
   let spend=0, imp=0, clicks=0, lpv=0;
+  let addToCart=0, purchase=0;
   adsRows.forEach(r => {
     spend  += getSpend(r);
     imp    += getImp(r);
     clicks += getClicks(r);
     lpv    += getLPV(r);
+    addToCart += getAddToCart(r);
+    purchase += getPurchase(r);
   });
 
   const ctr = imp    > 0 ? clicks / imp * 100  : 0;
@@ -4266,8 +4303,14 @@ function renderTrafego() {
   const custoNoShow = noShow > 0 && spend > 0 ? spend / noShow : 0;
   const custoCallFeita = callFeita > 0 && spend > 0 ? spend / callFeita : 0;
   const custoLpv = lpv > 0 && spend > 0 ? spend / lpv : 0;
+  const custoAddToCart = addToCart > 0 && spend > 0 ? spend / addToCart : 0;
+  const custoPurchase = purchase > 0 && spend > 0 ? spend / purchase : 0;
+  const txClickToLpv = clicks > 0 && lpv > 0 ? (lpv / clicks * 100) : 0;
+  const txLpvToCart = lpv > 0 && addToCart > 0 ? (addToCart / lpv * 100) : 0;
+  const txCartToPurchase = addToCart > 0 && purchase > 0 ? (purchase / addToCart * 100) : 0;
+  const funnelType = String(getActiveFunnel()?.funnelType || 'sessao_estrategica');
 
-  const primaryHtml = `
+  const primaryHtmlStrategic = `
     <div class="kpi-card red kpi-span-3"><div class="kpi-label"><span class="metric-dot dot-red"></span>Verba Gasta</div><div class="kpi-value red small">${brl(spend)}</div><div class="kpi-sub">base de custos no período</div></div>
 
     <div class="kpi-card teal"><div class="kpi-label"><span class="metric-dot dot-teal"></span>Leads Captados</div><div class="kpi-value teal">${fmt(leads)}</div><div class="kpi-sub">conversões no período</div></div>
@@ -4295,6 +4338,21 @@ function renderTrafego() {
     <div class="kpi-card purple"><div class="kpi-label"><span class="metric-dot dot-pink"></span>Tx No-Show</div><div class="kpi-value purple">${txNoShow > 0 ? pct(txNoShow) : '—'}</div><div class="kpi-sub">no-show ÷ confirmada</div></div>
   `;
 
+  const primaryHtmlSalesLeadMagnet = `
+    <div class="kpi-card red kpi-span-3"><div class="kpi-label"><span class="metric-dot dot-red"></span>Verba Gasta</div><div class="kpi-value red small">${brl(spend)}</div><div class="kpi-sub">base de custos no período</div></div>
+    <div class="kpi-card teal"><div class="kpi-label"><span class="metric-dot dot-purple"></span>Cliques no Link</div><div class="kpi-value teal">${fmt(clicks)}</div><div class="kpi-sub">tráfego gerado</div></div>
+    <div class="kpi-card gold"><div class="kpi-label"><span class="metric-dot dot-orange"></span>Custo por Clique</div><div class="kpi-value gold small">${clicks > 0 ? brl(cpc) : '—'}</div><div class="kpi-sub">verba ÷ cliques</div></div>
+    <div class="kpi-card purple"><div class="kpi-label"><span class="metric-dot dot-blue"></span>Tx Clique → LPV</div><div class="kpi-value purple">${txClickToLpv > 0 ? pct(txClickToLpv) : '—'}</div><div class="kpi-sub">LPV ÷ cliques</div></div>
+    <div class="kpi-card teal"><div class="kpi-label"><span class="metric-dot dot-pink"></span>Visualização Página Destino</div><div class="kpi-value teal">${fmt(lpv)}</div><div class="kpi-sub">landing views</div></div>
+    <div class="kpi-card gold"><div class="kpi-label"><span class="metric-dot dot-gold"></span>Custo por LPV</div><div class="kpi-value gold small">${lpv > 0 ? brl(custoLpv) : '—'}</div><div class="kpi-sub">verba ÷ LPV</div></div>
+    <div class="kpi-card purple"><div class="kpi-label"><span class="metric-dot dot-pink"></span>Adição ao Carrinho</div><div class="kpi-value purple">${fmt(addToCart)}</div><div class="kpi-sub">evento de intenção</div></div>
+    <div class="kpi-card gold"><div class="kpi-label"><span class="metric-dot dot-orange"></span>Custo por Carrinho</div><div class="kpi-value gold small">${addToCart > 0 ? brl(custoAddToCart) : '—'}</div><div class="kpi-sub">verba ÷ add to cart</div></div>
+    <div class="kpi-card purple"><div class="kpi-label"><span class="metric-dot dot-pink"></span>Tx LPV → Carrinho</div><div class="kpi-value purple">${txLpvToCart > 0 ? pct(txLpvToCart) : '—'}</div><div class="kpi-sub">add to cart ÷ LPV</div></div>
+    <div class="kpi-card teal"><div class="kpi-label"><span class="metric-dot dot-green"></span>Compra</div><div class="kpi-value teal">${fmt(purchase)}</div><div class="kpi-sub">evento final</div></div>
+    <div class="kpi-card gold"><div class="kpi-label"><span class="metric-dot dot-orange"></span>Custo por Compra</div><div class="kpi-value gold small">${purchase > 0 ? brl(custoPurchase) : '—'}</div><div class="kpi-sub">verba ÷ compras</div></div>
+    <div class="kpi-card purple"><div class="kpi-label"><span class="metric-dot dot-pink"></span>Tx Carrinho → Compra</div><div class="kpi-value purple">${txCartToPurchase > 0 ? pct(txCartToPurchase) : '—'}</div><div class="kpi-sub">compra ÷ carrinho</div></div>
+  `;
+
   const secondaryHtml = `
     <div class="kpi-card teal"><div class="kpi-label"><span class="metric-dot dot-teal"></span>Impressões</div><div class="kpi-value teal">${fmt(imp)}</div><div class="kpi-sub">alcance pago no período</div></div>
     <div class="kpi-card gold"><div class="kpi-label"><span class="metric-dot dot-gold"></span>CPM</div><div class="kpi-value gold small">${imp > 0 ? brl(cpm) : '—'}</div><div class="kpi-sub">verba ÷ 1.000 impressões</div></div>
@@ -4309,6 +4367,7 @@ function renderTrafego() {
     <div class="kpi-card purple"><div class="kpi-label"><span class="metric-dot dot-blue"></span>Conv. Cliques → Lead</div><div class="kpi-value purple">${convRate > 0 ? pct(convRate) : '—'}</div><div class="kpi-sub">${fmt(leads)} de ${fmt(clicks)} cliques</div></div>
   `;
 
+  const primaryHtml = funnelType === 'isca_vendas' ? primaryHtmlSalesLeadMagnet : primaryHtmlStrategic;
   document.getElementById('kpiTrafego').innerHTML = kpiMode === 'secondary' ? secondaryHtml : primaryHtml;
 
   // Charts diários
