@@ -1542,11 +1542,21 @@ function getColumnsFromRows(rows) {
   return Array.from(set);
 }
 
+function getAllLoadedColumns() {
+  return getColumnsFromRows([
+    ...(RAW.etapas || []),
+    ...(RAW.conv || []),
+    ...(RAW.ads || []),
+    ...Object.values(RAW.stages || {}).flat()
+  ]);
+}
+
 function fillMetricColumnSelect(metricKey, suffix) {
   const sel = document.getElementById(`rule${suffix}Column`);
   if (!sel) return;
   const rows = getRowsForMetricKey(metricKey);
-  const cols = getColumnsFromRows(rows).sort((a, b) => a.localeCompare(b));
+  const specific = getColumnsFromRows(rows);
+  const cols = (specific.length ? specific : getAllLoadedColumns()).sort((a, b) => a.localeCompare(b));
   const current = String(METRIC_RULES?.[metricKey]?.filterColumn || '').trim();
   sel.innerHTML = '<option value="">Selecionar coluna</option>';
   cols.forEach(c => {
@@ -1598,14 +1608,27 @@ function autoMapMetricRuleColumns() {
     ['noShow', 'NoShow', ['status', 'etapa', 'fase', 'no show', 'noshow']],
     ['callFeita', 'CallFeita', ['status', 'etapa', 'fase', 'call feita']]
   ];
+  let changed = 0;
   cfg.forEach(([metricKey, suffix, keywords]) => {
     const rows = getRowsForMetricKey(metricKey);
     const cols = getColumnsFromRows(rows);
-    const best = findBestColumnByKeywords(cols, keywords);
+    const baseCols = cols.length ? cols : getAllLoadedColumns();
+    if (!baseCols.length) return;
+    const best = findBestColumnByKeywords(baseCols, keywords);
     if (!best) return;
+    if (String(METRIC_RULES?.[metricKey]?.filterColumn || '') !== best) changed++;
+    METRIC_RULES[metricKey] = {
+      ...(METRIC_RULES[metricKey] || DEFAULT_METRIC_RULES[metricKey]),
+      filterColumn: best
+    };
     const sel = document.getElementById(`rule${suffix}Column`);
     if (sel) sel.value = best;
   });
+  if (changed > 0) populateMetricRuleColumnOptions();
+  const status = document.getElementById('autoGidStatus');
+  if (status) status.textContent = changed > 0
+    ? `Mapeamento aplicado para ${changed} métrica(s).`
+    : 'Não encontrei colunas compatíveis automaticamente.';
 }
 
 function openMetricRulesModal() {
