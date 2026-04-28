@@ -2797,18 +2797,26 @@ function isMqlRow(r) {
 }
 
 function getTrafficLeadStats() {
-  const rows = getTrafficLeadRows();
-  if (!rows.length) return { leads: 0, mql: 0 };
-  const dateCol = getTrafficLeadDateCol(rows);
+  const leadRows = getRowsForMetricKey('lead');
+  const mqlRows = getRowsForMetricKey('mql');
+  const leadDateCol = getTrafficLeadDateCol(leadRows);
+  const mqlDateCol = getTrafficLeadDateCol(mqlRows);
   let leads = 0, mql = 0;
-  rows.forEach(r => {
-    if (!isLeadRow(r)) return;
-    if (dateCol) {
-      const d = parseDate(r[dateCol]);
-      if (!inPeriod(d)) return;
+  leadRows.forEach(r => {
+    if (!rowMatchesMetricRule(r, METRIC_RULES.lead)) return;
+    if (leadDateCol) {
+      const d = parseDate(r[leadDateCol]);
+      if (d && !inPeriod(d)) return;
     }
     leads++;
-    if (isMqlRow(r)) mql++;
+  });
+  mqlRows.forEach(r => {
+    if (!rowMatchesMetricRule(r, METRIC_RULES.mql)) return;
+    if (mqlDateCol) {
+      const d = parseDate(r[mqlDateCol]);
+      if (d && !inPeriod(d)) return;
+    }
+    mql++;
   });
   return { leads, mql };
 }
@@ -2860,7 +2868,7 @@ function countStageInPeriod(rows, filters, metricKey = 'lead') {
     if (!rowMatchesMetricRule(r, rule)) return;
     if (dateCol) {
       const d = parseDate(r[dateCol]);
-      if (!inPeriod(d)) return;
+      if (d && !inPeriod(d)) return;
     }
     const c = getLeadUtmCampaign(r);
     const a = getLeadUtmContent(r);
@@ -2880,13 +2888,14 @@ function countStageInPeriod(rows, filters, metricKey = 'lead') {
 
 // ── Leads por dia (para gráfico) — apenas leads pagos válidos ──
 function leadsByDay() {
-  const rows = getTrafficLeadRows();
+  const rows = getRowsForMetricKey('lead');
   const dateCol = getTrafficLeadDateCol(rows);
   const byDay = {};
   rows.forEach(r => {
     if (!isLeadRow(r)) return;
     if (dateCol) {
       const d = parseDate(r[dateCol]);
+      if (!d) return;
       if (!inPeriod(d)) return;
       const k = dateKey(d);
       byDay[k] = (byDay[k] || 0) + 1;
@@ -3168,7 +3177,7 @@ function renderTopLeadBlocks(adsRows) {
         if (!utmVal || utmVal === '-' || utmVal.startsWith('{{')) return;
         if (rowDateCol) {
           const d = parseDate(r[rowDateCol]);
-          if (!inPeriod(d)) return;
+          if (d && !inPeriod(d)) return;
         }
         const key = normKey(utmVal);
         if (map[key]) map[key][field]++;
@@ -3193,7 +3202,7 @@ function renderTopLeadBlocks(adsRows) {
       if (!utmVal || utmVal === '-' || utmVal.startsWith('{{')) return;
       if (dateCol) {
         const d = parseDate(r[dateCol]);
-        if (!inPeriod(d)) return;
+        if (d && !inPeriod(d)) return;
       }
       const key = normKey(utmVal);
       if (map[key]) map[key].leads++;
@@ -3570,28 +3579,33 @@ function renderTrafego() {
     byDaySpend[k] = (byDaySpend[k]||0) + getSpend(r);
   });
 
-  const leadRows = getTrafficLeadRows();
-  const mqlRows = leadRows.filter(isMqlRow);
-  const agRows = getStageRowsByAliases(['Contato de Confirmacao', 'Contato de Confirmação']);
-  const confRows = getStageRowsByAliases(['Call Confirmada', 'Reuniao Confirmada', 'Reunião Confirmada']);
-  const noShowRows = getStageRowsByAliases(['No-Show', 'No Show']);
-  const callRows = getStageRowsByAliases(['Call Feita']);
+  const leadRows = getRowsForMetricKey('lead');
+  const mqlRows = getRowsForMetricKey('mql');
+  const agRows = getRowsForMetricKey('agendada');
+  const confRows = getRowsForMetricKey('confirmada');
+  const noShowRows = getRowsForMetricKey('noShow');
+  const callRows = getRowsForMetricKey('callFeita');
 
-  function countByDay(rows) {
+  function countByDay(rows, metricKey) {
     const dateCol = getTrafficLeadDateCol(rows);
+    const rule = METRIC_RULES[metricKey] || DEFAULT_METRIC_RULES.lead;
     const out = {};
     rows.forEach(r => {
-      if (!isLeadRow(r)) return;
+      if (!rowMatchesMetricRule(r, rule)) return;
       if (dateCol) {
         const d = parseDate(r[dateCol]);
+        if (!d) return;
         if (!inPeriod(d)) return;
         const c = getLeadUtmCampaign(r);
         const a = getLeadUtmContent(r);
         const ad = getLeadUtmTerm(r);
-        if (campPattern && !normKey(c).includes(normKey(campPattern))) return;
-        if (fCamp && c !== fCamp) return;
-        if (fAdset && a !== fAdset) return;
-        if (fAd && ad !== fAd) return;
+        const hasCampaign = !!String(c || '').trim();
+        const hasAdset = !!String(a || '').trim();
+        const hasAd = !!String(ad || '').trim();
+        if (campPattern && hasCampaign && !normKey(c).includes(normKey(campPattern))) return;
+        if (fCamp && hasCampaign && c !== fCamp) return;
+        if (fAdset && hasAdset && a !== fAdset) return;
+        if (fAd && hasAd && ad !== fAd) return;
         const k = dateKey(d);
         out[k] = (out[k] || 0) + 1;
       }
@@ -3600,12 +3614,12 @@ function renderTrafego() {
   }
 
   const dayMaps = {
-    leads: countByDay(leadRows),
-    mql: countByDay(mqlRows),
-    agendada: countByDay(agRows),
-    confirmada: countByDay(confRows),
-    noShow: countByDay(noShowRows),
-    callFeita: countByDay(callRows)
+    leads: countByDay(leadRows, 'lead'),
+    mql: countByDay(mqlRows, 'mql'),
+    agendada: countByDay(agRows, 'agendada'),
+    confirmada: countByDay(confRows, 'confirmada'),
+    noShow: countByDay(noShowRows, 'noShow'),
+    callFeita: countByDay(callRows, 'callFeita')
   };
 
   const dates = [];
@@ -3756,7 +3770,7 @@ function renderPerfTable(adsRows) {
       if (!utmVal || utmVal === '-' || utmVal.startsWith('{{')) return;
       if (rowDateCol) {
         const d = parseDate(r[rowDateCol]);
-        if (!inPeriod(d)) return;
+        if (d && !inPeriod(d)) return;
       }
       const key = normKey(utmVal);
       if (map[key]) map[key][field]++;
