@@ -117,6 +117,7 @@ html,body { background:var(--bg); color:var(--text); font-family:var(--font-body
 .level-tab { padding:6px 14px; border-radius:5px; background:transparent; color:var(--text2); cursor:pointer; font-family:var(--font-mono); font-size:10px; text-transform:uppercase; letter-spacing:0.08em; transition:all 0.15s; border:none; }
 .level-tab.active { background:var(--teal-dim); color:var(--teal); }
 .level-tab:hover:not(.active) { color:var(--text); }
+.attrib-toggle { margin-left:auto; }
 .sort-controls { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
 .sort-select { background:var(--bg2); border:1px solid var(--border2); border-radius:6px; padding:7px 10px; color:var(--white); font-family:var(--font-mono); font-size:10px; outline:none; min-width:140px; }
 .sort-select:focus { border-color:var(--teal); }
@@ -254,6 +255,7 @@ tbody td { padding:11px 12px; font-size:13px; color:var(--text); }
   .tabs { padding:0 16px; }
   .filter-bar { padding:12px; }
   .toggle-switch { margin-left:0; }
+  .attrib-toggle { margin-left:0; }
 }
 </style>
 </head>
@@ -583,6 +585,10 @@ tbody td { padding:11px 12px; font-size:13px; color:var(--text); }
         <div class="toggle-track"><div class="toggle-thumb"></div></div>
         <span class="toggle-label">Só com leads</span>
       </label>
+      <div class="level-toggle attrib-toggle" title="Modo de contabilização">
+        <button class="level-tab active" id="attribAllBtn" onclick="setAttributionMode('all')">Todos (orgânico + pago)</button>
+        <button class="level-tab" id="attribPaidBtn" onclick="setAttributionMode('paid')">Só tráfego pago</button>
+      </div>
     </div>
 
     <div class="filter-bar">
@@ -1148,6 +1154,7 @@ let topSortMetric = 'leads';
 let topSortOrder = 'desc';
 let dailyValueMetric = 'leads';
 let dailyCostMetric = 'spend';
+let attributionMode = 'all';
 const DEFAULT_VISIBLE_METRICS = [
   'spend','leads','cpl','cpm','cpc','ctr','mql','cpmql','agendada','confirmada','noShow','callFeita',
   'cAgendada','cConfirmada','cNoShow','cCallFeita'
@@ -1366,7 +1373,8 @@ function buildSharePayload() {
       campaignContains,
       Array.from(visibleMetrics || []),
       dailyValueMetric,
-      dailyCostMetric
+      dailyCostMetric,
+      attributionMode
     ]
   };
 }
@@ -1379,6 +1387,7 @@ try {
   }
   if (savedTraffic.dailyValueMetric) dailyValueMetric = String(savedTraffic.dailyValueMetric);
   if (savedTraffic.dailyCostMetric) dailyCostMetric = String(savedTraffic.dailyCostMetric);
+  if (savedTraffic.attributionMode === 'paid') attributionMode = 'paid';
 } catch {}
 
 try {
@@ -1447,7 +1456,8 @@ try {
       campaignContains: shared.t[0],
       visibleMetrics: shared.t[1],
       dailyValueMetric: shared.t[2],
-      dailyCostMetric: shared.t[3]
+      dailyCostMetric: shared.t[3],
+      attributionMode: shared.t[4]
     };
     campaignContains = String(t.campaignContains || '').trim();
     if (Array.isArray(t.visibleMetrics) && t.visibleMetrics.length) {
@@ -1455,11 +1465,13 @@ try {
     }
     if (t.dailyValueMetric) dailyValueMetric = String(t.dailyValueMetric);
     if (t.dailyCostMetric) dailyCostMetric = String(t.dailyCostMetric);
+    if (t.attributionMode === 'paid') attributionMode = 'paid';
     localStorage.setItem(getTrafficKey(), JSON.stringify({
       campaignContains,
       visibleMetrics: Array.from(visibleMetrics),
       dailyValueMetric,
-      dailyCostMetric
+      dailyCostMetric,
+      attributionMode
     }));
   } else if (shared?.cfg) {
     // Compatibilidade com links antigos (v1)
@@ -1500,11 +1512,13 @@ try {
     }
     if (t.dailyValueMetric) dailyValueMetric = String(t.dailyValueMetric);
     if (t.dailyCostMetric) dailyCostMetric = String(t.dailyCostMetric);
+    if (t.attributionMode === 'paid') attributionMode = 'paid';
     localStorage.setItem(getTrafficKey(), JSON.stringify({
       campaignContains,
       visibleMetrics: Array.from(visibleMetrics),
       dailyValueMetric,
-      dailyCostMetric
+      dailyCostMetric,
+      attributionMode
     }));
   }
 } catch {}
@@ -2880,8 +2894,9 @@ function hasAttributionValue(v) {
 function rowMatchesMetricRule(r, rule) {
   if (!rule) return false;
   if (rule.available === false) return false;
+  const mustBePaid = attributionMode === 'paid';
   // Só exige UTM quando a fonte realmente tem esse campo.
-  if (rule.requirePaidCampaign !== false && rowHasUtmCampaignField(r) && !isPaidCampaignRow(r)) return false;
+  if (mustBePaid && rowHasUtmCampaignField(r) && !isPaidCampaignRow(r)) return false;
   if (rule.mode === 'count_filtered') {
     const col = String(rule.filterColumn || '').trim();
     const wanted = normalizeName(rule.filterValue || '');
@@ -3082,7 +3097,8 @@ function onDailyMetricChange() {
       campaignContains,
       visibleMetrics: Array.from(visibleMetrics),
       dailyValueMetric,
-      dailyCostMetric
+      dailyCostMetric,
+      attributionMode
     }));
   } catch {}
   writeSharedCfgToUrl(buildSharePayload());
@@ -3247,6 +3263,28 @@ function onToggleLeads() {
   renderTrafego();
 }
 
+function refreshAttributionModeButtons() {
+  const allBtn = document.getElementById('attribAllBtn');
+  const paidBtn = document.getElementById('attribPaidBtn');
+  if (allBtn) allBtn.classList.toggle('active', attributionMode === 'all');
+  if (paidBtn) paidBtn.classList.toggle('active', attributionMode === 'paid');
+}
+
+function setAttributionMode(mode) {
+  attributionMode = mode === 'paid' ? 'paid' : 'all';
+  refreshAttributionModeButtons();
+  try {
+    localStorage.setItem(getTrafficKey(), JSON.stringify({
+      campaignContains,
+      visibleMetrics: Array.from(visibleMetrics),
+      dailyValueMetric,
+      dailyCostMetric,
+      attributionMode
+    }));
+  } catch {}
+  renderTrafego();
+}
+
 function renderTopLeadBlocks(adsRows) {
   const leadRows = getTrafficLeadRows();
   const dateCol = getTrafficLeadDateCol(leadRows);
@@ -3406,7 +3444,8 @@ function onCampaignContainsChange() {
       campaignContains,
       visibleMetrics: Array.from(visibleMetrics),
       dailyValueMetric,
-      dailyCostMetric
+      dailyCostMetric,
+      attributionMode
     }));
   } catch {}
   const cfgInp = document.getElementById('defaultCampContains');
@@ -3432,7 +3471,8 @@ function ensureVisibleMetricsNotEmpty() {
       campaignContains,
       visibleMetrics: Array.from(visibleMetrics),
       dailyValueMetric,
-      dailyCostMetric
+      dailyCostMetric,
+      attributionMode
     }));
   } catch {}
   return true;
@@ -3471,7 +3511,8 @@ function onVisibleMetricsChange() {
       campaignContains,
       visibleMetrics: Array.from(visibleMetrics),
       dailyValueMetric,
-      dailyCostMetric
+      dailyCostMetric,
+      attributionMode
     }));
   } catch {}
   writeSharedCfgToUrl(buildSharePayload());
@@ -3492,7 +3533,8 @@ function selectAllVisibleMetrics(event) {
       campaignContains,
       visibleMetrics: Array.from(visibleMetrics),
       dailyValueMetric,
-      dailyCostMetric
+      dailyCostMetric,
+      attributionMode
     }));
   } catch {}
   writeSharedCfgToUrl(buildSharePayload());
@@ -4013,6 +4055,7 @@ document.getElementById('perfSortMetric').value = perfSortMetric;
 document.getElementById('topSortMetric').value = topSortMetric;
 document.getElementById('dailyValueMetric').value = dailyValueMetric;
 document.getElementById('dailyCostMetric').value = dailyCostMetric;
+refreshAttributionModeButtons();
 syncMetricChooserFromState();
 applyMetricColumnVisibility();
 if (!FUNNELS.some(f => f.id === activeFunnelId)) activeFunnelId = FUNNELS[0].id;
