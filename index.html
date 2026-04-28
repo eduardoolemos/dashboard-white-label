@@ -263,7 +263,7 @@ tbody td { padding:11px 12px; font-size:13px; color:var(--text); }
 
 <div class="header">
   <div class="logo">
-    evolving<span>.</span>
+    <span id="brandNameHeader">evolving</span><span>.</span>
     <span class="logo-sub">dashboard</span>
   </div>
   <div class="header-right">
@@ -321,6 +321,11 @@ tbody td { padding:11px 12px; font-size:13px; color:var(--text); }
         <label>Cliente (slug white-label)</label>
         <input type="text" id="tenantKey" placeholder="Ex: evolving, cliente-x">
         <div class="config-hint">Isola a configuração por cliente usando <code>?tenant=slug</code> na URL.</div>
+      </div>
+      <div class="config-field">
+        <label>Nome exibido no dashboard</label>
+        <input type="text" id="brandNameInput" placeholder="Ex: Evolving">
+        <div class="config-hint">Aparece no canto superior esquerdo e no titulo da aba do navegador.</div>
       </div>
       <div class="stage-config-wrap">
         <div class="stage-config-title">Validação de leads</div>
@@ -921,6 +926,13 @@ function applyTenantFromInput(syncUrl = false) {
   } catch {}
 }
 
+function applyBranding() {
+  const name = String(BRAND_NAME || '').trim() || 'Evolving';
+  const header = document.getElementById('brandNameHeader');
+  if (header) header.textContent = name.toLowerCase();
+  document.title = `${name} — Dashboard`;
+}
+
 let GID_ETAPAS = '';
 let GID_CONV   = '';
 let GID_ADS    = '907185909';
@@ -942,6 +954,7 @@ const STANDARD_STAGE_CONFIGS = [
 let STAGE_CONFIGS = DEFAULT_STAGE_CONFIGS.map(s => ({ ...s }));
 let FUNNELS = [];
 let activeFunnelId = 'default';
+let BRAND_NAME = 'Evolving';
 const DEFAULT_METRIC_RULES = {
   lead: {
     mode: 'count_all',
@@ -1068,6 +1081,7 @@ try {
   const saved = JSON.parse(localStorage.getItem(getCfgKey()) || '{}');
   if (saved.sheetId) SHEET_ID = saved.sheetId;
   if (saved.publishedBase) PUBLISHED_BASE = saved.publishedBase;
+  if (saved.brandName) BRAND_NAME = String(saved.brandName);
   if (saved.gidEtapas) GID_ETAPAS = saved.gidEtapas;
   if (saved.gidConv)   GID_CONV   = saved.gidConv;
   if (saved.gidAds)    GID_ADS    = saved.gidAds;
@@ -1367,7 +1381,8 @@ function buildSharePayload() {
           METRIC_RULES.callFeita.sourceKey || 'auto',
           METRIC_RULES.callFeita.available !== false ? 1 : 0
         ]
-      ]
+      ],
+      BRAND_NAME
     ],
     t: [
       campaignContains,
@@ -1438,10 +1453,12 @@ try {
         callFeita: resolveMetricRule({ mode: callFeita[0], filterColumn: callFeita[1], filterValue: callFeita[2], requirePaidCampaign: Number(callFeita[3]) !== 0, sourceKey: callFeita[4], available: Number(callFeita[5]) !== 0 }, DEFAULT_METRIC_RULES.callFeita)
       };
     }
+    if (c[9]) BRAND_NAME = String(c[9]);
     if (c[5]) activeFunnelId = String(c[5]);
     localStorage.setItem(getCfgKey(), JSON.stringify({
       sheetId: SHEET_ID,
       publishedBase: PUBLISHED_BASE,
+      brandName: BRAND_NAME,
       gidEtapas: GID_ETAPAS,
       gidConv: GID_CONV,
       gidAds: GID_ADS,
@@ -1573,6 +1590,7 @@ function persistConfigState() {
     localStorage.setItem(getCfgKey(), JSON.stringify({
       sheetId: SHEET_ID,
       publishedBase: PUBLISHED_BASE,
+      brandName: BRAND_NAME,
       gidEtapas: GID_ETAPAS,
       gidConv: GID_CONV,
       gidAds: GID_ADS,
@@ -1600,6 +1618,8 @@ function renderFunnelSelectors() {
 }
 
 function fillConfigInputsFromGlobals() {
+  const brandNameInput = document.getElementById('brandNameInput');
+  if (brandNameInput) brandNameInput.value = BRAND_NAME;
   document.getElementById('gidEtapas').value = GID_ETAPAS;
   document.getElementById('gidConversoes').value = GID_CONV;
   document.getElementById('gidAds').value = GID_ADS;
@@ -4036,6 +4056,8 @@ function renderPerfTable(adsRows) {
 
 // ── SAVE CONFIG ────────────────────────
 function syncGlobalsFromConfigInputs() {
+  BRAND_NAME = String(document.getElementById('brandNameInput')?.value || BRAND_NAME).trim() || 'Evolving';
+  applyBranding();
   GID_ETAPAS = document.getElementById('gidEtapas').value.trim();
   GID_CONV   = document.getElementById('gidConversoes').value.trim();
   GID_ADS    = document.getElementById('gidAds').value.trim();
@@ -4078,6 +4100,7 @@ async function saveConfigAndLoad() {
 // ── INIT ────────────────────────────────
 document.getElementById('sheetLink').value     = PUBLISHED_BASE;
 document.getElementById('tenantKey').value     = CLIENT_KEY;
+document.getElementById('brandNameInput').value = BRAND_NAME;
 document.getElementById('campContains').value  = campaignContains;
 document.getElementById('perfSortMetric').value = perfSortMetric;
 document.getElementById('topSortMetric').value = topSortMetric;
@@ -4090,6 +4113,7 @@ if (!FUNNELS.some(f => f.id === activeFunnelId)) activeFunnelId = FUNNELS[0].id;
 applyActiveFunnelToGlobals();
 renderFunnelSelectors();
 fillConfigInputsFromGlobals();
+applyBranding();
 writeSharedCfgToUrl(buildSharePayload());
 
 loadAll();
