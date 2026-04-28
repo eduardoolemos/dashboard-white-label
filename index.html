@@ -2034,6 +2034,21 @@ function getSurveyValue(row, mapKey, aliasKey, getFieldByAliasesFn) {
   return getFieldByAliasesFn(row, getSurveyAliases(aliasKey));
 }
 
+function getSurveyValueByMapping(row, mapping) {
+  const column = String(mapping?.column || '').trim();
+  const byColumn = getFieldByMappedColumn(row, column);
+  if (byColumn) return byColumn;
+  const questionText = String(mapping?.questionText || '').trim();
+  if (!questionText) return '';
+  const keys = Object.keys(row || {});
+  const nq = normalizeName(questionText).replace(/\s+/g, '');
+  const keyByQuestion = keys.find((k) => {
+    const nk = normalizeName(k).replace(/\s+/g, '');
+    return nk.includes(nq) || nq.includes(nk);
+  });
+  return keyByQuestion ? String(row[keyByQuestion] || '').trim() : '';
+}
+
 function syncMetricRulesFromConfigInputs() {
   const ids = [
     ['lead', 'Lead'],
@@ -3016,13 +3031,7 @@ function renderConversoes(rows) {
 
   const filteredBySelectors = rowsByAdset.filter(r => !selectedAd || r.anuncio_resp === selectedAd);
 
-  const completeRows = filteredBySelectors.filter(r => {
-    return (r.prioridade || '').trim()
-      && (r.situacao_financeira || '').trim()
-      && (r.urgencia || '').trim()
-      && (r.estoque || '').trim()
-      && (r.faturamento_lojista || '').trim();
-  });
+  const completeRows = filteredBySelectors;
 
   if (!completeRows.length) {
     document.getElementById('kpiConversoes').innerHTML = '<div style="color:var(--text2);font-size:13px;grid-column:span 4;padding:20px 0;">Sem dados para o período selecionado.</div>';
@@ -3037,10 +3046,25 @@ function renderConversoes(rows) {
   }
 
   const total = completeRows.length;
-  const respondedPrior = completeRows.filter(r => (r.prioridade || '').trim()).length;
-  const respondedSit = completeRows.filter(r => (r.situacao_financeira || '').trim()).length;
-  const respondedUrg = completeRows.filter(r => (r.urgencia || '').trim()).length;
-  const respondedEst = completeRows.filter(r => (r.estoque || '').trim()).length;
+  const activeQuestionMappings = (SURVEY_CONFIG.questionMappings || [])
+    .map((m) => ({
+      questionText: String(m?.questionText || '').trim(),
+      column: String(m?.column || '').trim()
+    }))
+    .filter((m) => m.questionText || m.column);
+  const cardColors = ['gold', 'red', 'purple', 'teal'];
+  const dynamicQuestionCards = activeQuestionMappings.map((m, i) => {
+    const responded = completeRows.filter((r) => String(getSurveyValueByMapping(r, m) || '').trim()).length;
+    const percent = Math.round((responded / Math.max(1, total)) * 100);
+    const color = cardColors[i % cardColors.length];
+    const title = (m.questionText || m.column || `Pergunta ${i + 1}`).slice(0, 40);
+    return `
+      <div class="kpi-card ${color}">
+        <div class="kpi-label">Resp. ${title}</div>
+        <div class="kpi-value ${color}">${percent}%</div>
+        <div class="kpi-sub">${responded} de ${total}</div>
+      </div>`;
+  });
 
   document.getElementById('kpiConversoes').innerHTML = `
     <div class="kpi-card teal">
@@ -3048,21 +3072,7 @@ function renderConversoes(rows) {
       <div class="kpi-value teal">${total}</div>
       <div class="kpi-sub">linhas no período</div>
     </div>
-    <div class="kpi-card gold">
-      <div class="kpi-label">Resp. Prioridade</div>
-      <div class="kpi-value gold">${Math.round((respondedPrior/Math.max(1,total))*100)}%</div>
-      <div class="kpi-sub">${respondedPrior} de ${total}</div>
-    </div>
-    <div class="kpi-card red">
-      <div class="kpi-label">Resp. Sit. Financeira</div>
-      <div class="kpi-value red">${Math.round((respondedSit/Math.max(1,total))*100)}%</div>
-      <div class="kpi-sub">${respondedSit} de ${total}</div>
-    </div>
-    <div class="kpi-card purple">
-      <div class="kpi-label">Resp. Urgência / Estoque</div>
-      <div class="kpi-value purple">${Math.round((((respondedUrg+respondedEst)/2)/Math.max(1,total))*100)}%</div>
-      <div class="kpi-sub">${respondedUrg} urgência · ${respondedEst} estoque</div>
-    </div>`;
+    ${dynamicQuestionCards.join('')}`;
 
   const prioridadeCount = {};
   completeRows.forEach(r => {
