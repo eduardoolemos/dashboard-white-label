@@ -527,15 +527,15 @@ tbody td { padding:11px 12px; font-size:13px; color:var(--text); }
     <div class="kpi-grid" id="kpiConversoes"></div>
     <div class="grid-2" style="margin-bottom:16px;">
       <div class="card">
-        <div class="card-title">Prioridade</div>
-        <div class="card-sub">Contagem por resposta</div>
+        <div class="card-title" id="convCardTitle1">Pergunta 1</div>
+        <div class="card-sub" id="convCardSub1">Contagem por resposta</div>
         <div class="chart-wrap" style="height:220px;">
           <canvas id="chartPerfis"></canvas>
         </div>
       </div>
       <div class="card">
-        <div class="card-title">Situação Financeira</div>
-        <div class="card-sub">Distribuição das respostas</div>
+        <div class="card-title" id="convCardTitle2">Pergunta 2</div>
+        <div class="card-sub" id="convCardSub2">Distribuição das respostas</div>
         <div class="chart-wrap" style="height:220px;">
           <canvas id="chartAssinaturas"></canvas>
         </div>
@@ -543,13 +543,13 @@ tbody td { padding:11px 12px; font-size:13px; color:var(--text); }
     </div>
     <div class="grid-2" style="margin-bottom:16px;">
       <div class="card">
-        <div class="card-title">Urgência</div>
-        <div class="card-sub">Contagem por resposta</div>
+        <div class="card-title" id="convCardTitle3">Pergunta 3</div>
+        <div class="card-sub" id="convCardSub3">Contagem por resposta</div>
         <div id="controleGastos"></div>
       </div>
       <div class="card">
-        <div class="card-title">Estoque</div>
-        <div class="card-sub">Contagem por resposta</div>
+        <div class="card-title" id="convCardTitle4">Pergunta 4</div>
+        <div class="card-sub" id="convCardSub4">Contagem por resposta</div>
         <div id="campanhasConv"></div>
       </div>
     </div>
@@ -3052,6 +3052,23 @@ function renderConversoes(rows) {
       column: String(m?.column || '').trim()
     }))
     .filter((m) => m.questionText || m.column);
+  const chartMappings = [
+    activeQuestionMappings[0] || null,
+    activeQuestionMappings[1] || null,
+    activeQuestionMappings[2] || null,
+    activeQuestionMappings[3] || null
+  ];
+  const setConvBlockMeta = (idx, mapping, sub) => {
+    const titleEl = document.getElementById(`convCardTitle${idx}`);
+    const subEl = document.getElementById(`convCardSub${idx}`);
+    const label = String(mapping?.questionText || mapping?.column || `Pergunta ${idx}`).trim();
+    if (titleEl) titleEl.textContent = label;
+    if (subEl) subEl.textContent = sub;
+  };
+  setConvBlockMeta(1, chartMappings[0], 'Contagem por resposta');
+  setConvBlockMeta(2, chartMappings[1], 'Distribuição das respostas');
+  setConvBlockMeta(3, chartMappings[2], 'Contagem por resposta');
+  setConvBlockMeta(4, chartMappings[3], 'Contagem por resposta');
   const cardColors = ['gold', 'red', 'purple', 'teal'];
   const dynamicQuestionCards = activeQuestionMappings.map((m, i) => {
     const responded = completeRows.filter((r) => String(getSurveyValueByMapping(r, m) || '').trim()).length;
@@ -3074,11 +3091,18 @@ function renderConversoes(rows) {
     </div>
     ${dynamicQuestionCards.join('')}`;
 
-  const prioridadeCount = {};
-  completeRows.forEach(r => {
-    const v = (r.prioridade || '').trim();
-    prioridadeCount[v] = (prioridadeCount[v] || 0) + 1;
-  });
+  const mapAnswers = (mapping) => {
+    const out = {};
+    if (!mapping) return out;
+    completeRows.forEach((r) => {
+      const v = String(getSurveyValueByMapping(r, mapping) || '').trim();
+      if (!v) return;
+      out[v] = (out[v] || 0) + 1;
+    });
+    return out;
+  };
+
+  const prioridadeCount = mapAnswers(chartMappings[0]);
   const perfisLabels = Object.keys(prioridadeCount);
   const perfisData = perfisLabels.map(k => prioridadeCount[k]);
   if (chartPerfis) chartPerfis.destroy();
@@ -3098,11 +3122,7 @@ function renderConversoes(rows) {
     }
   });
 
-  const assMap = {};
-  completeRows.forEach(r => {
-    const a = r.situacao_financeira || '';
-    assMap[a] = (assMap[a] || 0) + 1;
-  });
+  const assMap = mapAnswers(chartMappings[1]);
   if (chartAssign) chartAssign.destroy();
   chartAssign = new Chart(document.getElementById('chartAssinaturas'), {
     type: 'doughnut',
@@ -3118,35 +3138,28 @@ function renderConversoes(rows) {
     }
   });
 
-  const ctrlMap = {};
-  completeRows.forEach(r => {
-    const c = r.urgencia || '';
-    ctrlMap[c] = (ctrlMap[c] || 0) + 1;
-  });
+  const ctrlMap = mapAnswers(chartMappings[2]);
   const maxCtrl = Math.max(...Object.values(ctrlMap),1);
   const ctrlColors = { 'Alta':'var(--red)', 'Média':'var(--gold)', 'Baixa':'var(--teal)', '?':'var(--text2)' };
-  document.getElementById('controleGastos').innerHTML = Object.entries(ctrlMap).sort((a,b)=>b[1]-a[1]).map(([c,n]) => {
+  const ctrlEntries = Object.entries(ctrlMap).sort((a,b)=>b[1]-a[1]);
+  document.getElementById('controleGastos').innerHTML = ctrlEntries.length ? ctrlEntries.map(([c,n]) => {
     const cor = Object.entries(ctrlColors).find(([k]) => normalizeName(c).includes(normalizeName(k)))?.[1] || 'var(--teal)';
     return `<div class="prog-row">
       <div class="prog-label">${c}</div>
       <div class="prog-bar-wrap"><div class="prog-bar" style="width:${((n/maxCtrl)*100).toFixed(0)}%;background:${cor};"></div></div>
       <div class="prog-val">${n}</div>
     </div>`;
-  }).join('');
+  }).join('') : '<div style="color:var(--text2);font-size:12px;">Sem respostas para esta pergunta.</div>';
 
-  const estoqueMap = {};
-  completeRows.forEach(r => {
-    const c = r.estoque || '';
-    estoqueMap[c] = (estoqueMap[c] || 0) + 1;
-  });
+  const estoqueMap = mapAnswers(chartMappings[3]);
   const sortedConv = Object.entries(estoqueMap).sort((a,b)=>b[1]-a[1]).slice(0,6);
   const maxCC = sortedConv[0]?.[1]||1;
-  document.getElementById('campanhasConv').innerHTML = sortedConv.map(([c,n]) => `
+  document.getElementById('campanhasConv').innerHTML = sortedConv.length ? sortedConv.map(([c,n]) => `
     <div class="prog-row">
       <div class="prog-label">${c}</div>
       <div class="prog-bar-wrap"><div class="prog-bar" style="width:${((n/maxCC)*100).toFixed(0)}%;background:var(--teal);"></div></div>
       <div class="prog-val">${n}</div>
-    </div>`).join('');
+    </div>`).join('') : '<div style="color:var(--text2);font-size:12px;">Sem respostas para esta pergunta.</div>';
 
   const sortDateKey = dateCol || 'data_hora';
   const ultimasConv = [...completeRows].sort((a,b)=>(String(b[sortDateKey]||'')).localeCompare(String(a[sortDateKey]||''))).slice(0,10);
