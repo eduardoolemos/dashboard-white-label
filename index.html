@@ -317,6 +317,7 @@ tbody td { padding:11px 12px; font-size:13px; color:var(--text); }
         <button class="btn-ghost" type="button" onclick="autoMapSurveyFieldsFromDetectedColumns()">Preencher mapeamento automático</button>
         <div class="config-status" id="surveyMapStatus"></div>
         <div id="surveyQuestionMappings"></div>
+        <button class="btn-stage-add" type="button" onclick="addSurveyQuestionMapping()">+ Adicionar mais</button>
       </div>
       <div class="stage-config-wrap">
         <div class="stage-config-title">Regras de qualificação</div>
@@ -1041,6 +1042,14 @@ const SURVEY_TARGET_FIELDS = [
   { key: 'faturamento', label: 'Faturamento' },
   { key: 'lojista', label: 'Lojista / Tipo de Negócio' }
 ];
+const SURVEY_TARGET_KEYWORDS = {
+  prioridade: ['prioridade', 'perfil', 'interesse'],
+  situacao: ['situação', 'situacao', 'financeira', 'financeiro', 'divida', 'dívida'],
+  urgencia: ['urgencia', 'urgência', 'prazo', 'imediato'],
+  estoque: ['estoque', 'inventario', 'inventário', 'produtos'],
+  faturamento: ['faturamento', 'receita', 'renda', 'mrr', 'ticket'],
+  lojista: ['lojista', 'tipo de negocio', 'tipo de negócio', 'segmento', 'loja']
+};
 const DEFAULT_SURVEY_CONFIG = {
   prioridadeAliases: ['Prioridade'],
   situacaoAliases: ['Situação Financeira', 'Situacao Financeira'],
@@ -1064,14 +1073,7 @@ const DEFAULT_SURVEY_CONFIG = {
     faturamento: '',
     lojista: ''
   },
-  questionMappings: [
-    { targetKey: 'prioridade', questionText: '', column: '' },
-    { targetKey: 'situacao', questionText: '', column: '' },
-    { targetKey: 'urgencia', questionText: '', column: '' },
-    { targetKey: 'estoque', questionText: '', column: '' },
-    { targetKey: 'faturamento', questionText: '', column: '' },
-    { targetKey: 'lojista', questionText: '', column: '' }
-  ],
+  questionMappings: [{ questionText: '', column: '' }],
   detectedColumns: [],
   qualificationRules: [
     { column: '', operator: 'contains', value: 'sim' },
@@ -1116,15 +1118,16 @@ function normalizeSurveyConfig(raw) {
       faturamento: String(fieldQuestions.faturamento || ''),
       lojista: String(fieldQuestions.lojista || '')
     },
-    questionMappings: (questionMappingsRaw.length ? questionMappingsRaw : SURVEY_TARGET_FIELDS.map((f) => ({
-      targetKey: f.key,
-      questionText: String(fieldQuestions[f.key] || ''),
-      column: String(fieldMap[f.key] || '')
-    }))).map((m) => ({
-      targetKey: SURVEY_TARGET_FIELDS.some((f) => f.key === String(m?.targetKey || '')) ? String(m.targetKey) : '',
+    questionMappings: (questionMappingsRaw.length
+      ? questionMappingsRaw
+      : SURVEY_TARGET_FIELDS.map((f) => ({
+          questionText: String(fieldQuestions[f.key] || ''),
+          column: String(fieldMap[f.key] || '')
+        }))
+    ).map((m) => ({
       questionText: String(m?.questionText || '').trim(),
       column: String(m?.column || '').trim()
-    })),
+    })).filter((m) => m.questionText || m.column),
     detectedColumns: Array.isArray(source.detectedColumns)
       ? source.detectedColumns.map((c) => String(c || '').trim()).filter(Boolean)
       : [],
@@ -1821,36 +1824,40 @@ function renderSurveyQuestionMappings() {
   const host = document.getElementById('surveyQuestionMappings');
   if (!host) return;
   const cols = getSurveyColumnOptions();
-  const rows = SURVEY_TARGET_FIELDS.map((f) => {
-    const found = (SURVEY_CONFIG.questionMappings || []).find((m) => m.targetKey === f.key);
-    return {
-      targetKey: f.key,
-      label: f.label,
-      questionText: String(found?.questionText || ''),
-      column: String(found?.column || '')
-    };
-  });
-  host.innerHTML = rows.map((m) => {
+  const rows = Array.isArray(SURVEY_CONFIG.questionMappings) ? SURVEY_CONFIG.questionMappings : [];
+  if (!rows.length) {
+    host.innerHTML = '<div class="config-hint" style="margin:6px 0 10px;">Sem perguntas adicionadas ainda.</div>';
+    return;
+  }
+  host.innerHTML = rows.map((m, idx) => {
     const colOptions = ['<option value="">Selecionar coluna</option>']
       .concat(cols.map((c) => `<option value="${c.replace(/"/g, '&quot;')}" ${c === m.column ? 'selected' : ''}>${c}</option>`))
       .join('');
     return `
       <div class="stage-row">
-        <input type="text" value="${String(m.questionText || '').replace(/"/g, '&quot;')}" placeholder="${m.label} - texto da pergunta" onchange="onSurveyQuestionMappingChange('${m.targetKey}', 'questionText', this.value)">
-        <select class="camp-select" onchange="onSurveyQuestionMappingChange('${m.targetKey}', 'column', this.value)">${colOptions}</select>
+        <input type="text" value="${String(m.questionText || '').replace(/"/g, '&quot;')}" placeholder="Texto da pergunta" onchange="onSurveyQuestionMappingChange(${idx}, 'questionText', this.value)">
+        <select class="camp-select" onchange="onSurveyQuestionMappingChange(${idx}, 'column', this.value)">${colOptions}</select>
+        <button class="btn-stage-remove" type="button" onclick="removeSurveyQuestionMapping(${idx})">Excluir</button>
       </div>
     `;
   }).join('');
 }
 
-function onSurveyQuestionMappingChange(targetKey, field, value) {
+function addSurveyQuestionMapping() {
   if (!Array.isArray(SURVEY_CONFIG.questionMappings)) SURVEY_CONFIG.questionMappings = [];
-  let row = SURVEY_CONFIG.questionMappings.find((m) => m.targetKey === targetKey);
-  if (!row) {
-    row = { targetKey, questionText: '', column: '' };
-    SURVEY_CONFIG.questionMappings.push(row);
-  }
-  row[field] = String(value || '').trim();
+  SURVEY_CONFIG.questionMappings.push({ questionText: '', column: '' });
+  renderSurveyQuestionMappings();
+}
+
+function removeSurveyQuestionMapping(index) {
+  if (!Array.isArray(SURVEY_CONFIG.questionMappings)) return;
+  SURVEY_CONFIG.questionMappings.splice(index, 1);
+  renderSurveyQuestionMappings();
+}
+
+function onSurveyQuestionMappingChange(index, field, value) {
+  if (!Array.isArray(SURVEY_CONFIG.questionMappings) || !SURVEY_CONFIG.questionMappings[index]) return;
+  SURVEY_CONFIG.questionMappings[index][field] = String(value || '').trim();
 }
 
 function autoMapSurveyFieldsFromDetectedColumns() {
@@ -1861,16 +1868,18 @@ function autoMapSurveyFieldsFromDetectedColumns() {
     return;
   }
   const before = JSON.stringify(SURVEY_CONFIG.questionMappings || []);
+  const next = Array.isArray(SURVEY_CONFIG.questionMappings) ? [...SURVEY_CONFIG.questionMappings] : [];
   const pick = (mapKey, keywords) => {
     const best = findBestColumnByKeywords(cols, keywords);
     if (!best) return;
-    const exists = (SURVEY_CONFIG.questionMappings || []).find((m) => m.targetKey === mapKey);
+    const label = SURVEY_TARGET_FIELDS.find((f) => f.key === mapKey)?.label || mapKey;
+    const exists = next.find((m) => normalizeName(m.questionText || '').includes(normalizeName(label)));
     if (exists) {
       exists.column = best;
-      if (!exists.questionText) exists.questionText = best;
+      if (!exists.questionText) exists.questionText = label;
       return;
     }
-    SURVEY_CONFIG.questionMappings.push({ targetKey: mapKey, questionText: best, column: best });
+    next.push({ questionText: label, column: best });
   };
   pick('prioridade', ['prioridade', 'perfil', 'grau de interesse']);
   pick('situacao', ['situacao financeira', 'situação financeira', 'financeiro', 'financeira', 'momento financeiro']);
@@ -1878,6 +1887,7 @@ function autoMapSurveyFieldsFromDetectedColumns() {
   pick('estoque', ['estoque', 'inventario', 'inventário', 'quantidade de produtos', 'tem produtos']);
   pick('faturamento', ['faturamento', 'receita', 'renda', 'ticket medio', 'ticket médio', 'mrr']);
   pick('lojista', ['lojista', 'tipo de negocio', 'tipo de negócio', 'segmento', 'empresa', 'loja']);
+  SURVEY_CONFIG.questionMappings = next;
   renderSurveyQuestionMappings();
   const after = JSON.stringify(SURVEY_CONFIG.questionMappings || []);
   const status = document.getElementById('surveyMapStatus');
@@ -1943,17 +1953,12 @@ function parseAliasInput(v, fallback) {
 function saveSurveyConfig() {
   const questionMappings = (SURVEY_CONFIG.questionMappings || [])
     .map((m) => ({
-      targetKey: String(m?.targetKey || '').trim(),
       questionText: String(m?.questionText || '').trim(),
       column: String(m?.column || '').trim()
     }))
-    .filter((m) => m.targetKey && (m.column || m.questionText));
+    .filter((m) => m.column || m.questionText);
   const fieldMap = {};
   const fieldQuestions = {};
-  questionMappings.forEach((m) => {
-    fieldMap[m.targetKey] = m.column;
-    fieldQuestions[m.targetKey] = m.questionText;
-  });
   const qualificationRules = (SURVEY_CONFIG.qualificationRules || [])
     .map((r) => ({
       column: String(r?.column || '').trim(),
@@ -1999,7 +2004,20 @@ function getFieldByMappedColumn(row, column) {
 }
 
 function getSurveyValue(row, mapKey, aliasKey, getFieldByAliasesFn) {
-  const mapping = (SURVEY_CONFIG?.questionMappings || []).find((m) => m.targetKey === mapKey) || {};
+  const rules = SURVEY_TARGET_KEYWORDS[mapKey] || [];
+  let mapping = {};
+  let bestScore = -1;
+  (SURVEY_CONFIG?.questionMappings || []).forEach((m) => {
+    const text = normalizeName(`${m.questionText || ''} ${m.column || ''}`);
+    let score = 0;
+    rules.forEach((k) => {
+      if (text.includes(normalizeName(k))) score++;
+    });
+    if (score > bestScore) {
+      bestScore = score;
+      mapping = m;
+    }
+  });
   const mapped = String(mapping.column || SURVEY_CONFIG?.fieldMap?.[mapKey] || '').trim();
   const byMap = getFieldByMappedColumn(row, mapped);
   if (byMap) return byMap;
