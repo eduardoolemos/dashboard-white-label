@@ -392,16 +392,17 @@ tbody td { padding:11px 12px; font-size:13px; color:var(--text); }
             </tr>
           </thead>
           <tbody>
-            <tr><td class="td-mono">Lead</td><td><select class="sort-select" id="ruleLeadMode"><option value="count_all">Contagem simples</option><option value="count_filtered">Contagem com filtro</option></select></td><td><input class="funnel-input" id="ruleLeadColumn" placeholder="Ex: status"></td><td><input class="funnel-input" id="ruleLeadValue" placeholder="Ex: lead"></td><td><label class="toggle-switch" style="margin-left:0;"><input type="checkbox" id="ruleLeadRequirePaid" checked><span class="toggle-track"><span class="toggle-thumb"></span></span><span class="toggle-label">UTM</span></label></td></tr>
-            <tr><td class="td-mono">Lead Qualificado (MQL)</td><td><select class="sort-select" id="ruleMqlMode"><option value="count_all">Contagem simples</option><option value="count_filtered">Contagem com filtro</option></select></td><td><input class="funnel-input" id="ruleMqlColumn" placeholder="Ex: qualificacao"></td><td><input class="funnel-input" id="ruleMqlValue" placeholder="Ex: qualificado"></td><td><label class="toggle-switch" style="margin-left:0;"><input type="checkbox" id="ruleMqlRequirePaid" checked><span class="toggle-track"><span class="toggle-thumb"></span></span><span class="toggle-label">UTM</span></label></td></tr>
-            <tr><td class="td-mono">Contato de Confirmação</td><td><select class="sort-select" id="ruleAgendadaMode"><option value="count_all">Contagem simples</option><option value="count_filtered">Contagem com filtro</option></select></td><td><input class="funnel-input" id="ruleAgendadaColumn" placeholder="Ex: status"></td><td><input class="funnel-input" id="ruleAgendadaValue" placeholder="Ex: contato"></td><td><label class="toggle-switch" style="margin-left:0;"><input type="checkbox" id="ruleAgendadaRequirePaid" checked><span class="toggle-track"><span class="toggle-thumb"></span></span><span class="toggle-label">UTM</span></label></td></tr>
-            <tr><td class="td-mono">Call Confirmada</td><td><select class="sort-select" id="ruleConfirmadaMode"><option value="count_all">Contagem simples</option><option value="count_filtered">Contagem com filtro</option></select></td><td><input class="funnel-input" id="ruleConfirmadaColumn" placeholder="Ex: status"></td><td><input class="funnel-input" id="ruleConfirmadaValue" placeholder="Ex: confirmada"></td><td><label class="toggle-switch" style="margin-left:0;"><input type="checkbox" id="ruleConfirmadaRequirePaid" checked><span class="toggle-track"><span class="toggle-thumb"></span></span><span class="toggle-label">UTM</span></label></td></tr>
-            <tr><td class="td-mono">No-Show</td><td><select class="sort-select" id="ruleNoShowMode"><option value="count_all">Contagem simples</option><option value="count_filtered">Contagem com filtro</option></select></td><td><input class="funnel-input" id="ruleNoShowColumn" placeholder="Ex: status"></td><td><input class="funnel-input" id="ruleNoShowValue" placeholder="Ex: no-show"></td><td><label class="toggle-switch" style="margin-left:0;"><input type="checkbox" id="ruleNoShowRequirePaid" checked><span class="toggle-track"><span class="toggle-thumb"></span></span><span class="toggle-label">UTM</span></label></td></tr>
-            <tr><td class="td-mono">Call Feita</td><td><select class="sort-select" id="ruleCallFeitaMode"><option value="count_all">Contagem simples</option><option value="count_filtered">Contagem com filtro</option></select></td><td><input class="funnel-input" id="ruleCallFeitaColumn" placeholder="Ex: status"></td><td><input class="funnel-input" id="ruleCallFeitaValue" placeholder="Ex: call feita"></td><td><label class="toggle-switch" style="margin-left:0;"><input type="checkbox" id="ruleCallFeitaRequirePaid" checked><span class="toggle-track"><span class="toggle-thumb"></span></span><span class="toggle-label">UTM</span></label></td></tr>
+            <tr><td class="td-mono">Lead</td><td><select class="sort-select" id="ruleLeadMode"><option value="count_all">Contagem simples</option><option value="count_filtered">Contagem com filtro</option></select></td><td><select class="sort-select" id="ruleLeadColumn"><option value="">Selecionar coluna</option></select></td><td><input class="funnel-input" id="ruleLeadValue" placeholder="Ex: lead"></td><td><label class="toggle-switch" style="margin-left:0;"><input type="checkbox" id="ruleLeadRequirePaid" checked><span class="toggle-track"><span class="toggle-thumb"></span></span><span class="toggle-label">UTM</span></label></td></tr>
+            <tr><td class="td-mono">Lead Qualificado (MQL)</td><td><select class="sort-select" id="ruleMqlMode"><option value="count_all">Contagem simples</option><option value="count_filtered">Contagem com filtro</option></select></td><td><select class="sort-select" id="ruleMqlColumn"><option value="">Selecionar coluna</option></select></td><td><input class="funnel-input" id="ruleMqlValue" placeholder="Ex: qualificado"></td><td><label class="toggle-switch" style="margin-left:0;"><input type="checkbox" id="ruleMqlRequirePaid" checked><span class="toggle-track"><span class="toggle-thumb"></span></span><span class="toggle-label">UTM</span></label></td></tr>
+            <tr><td class="td-mono">Contato de Confirmação</td><td><select class="sort-select" id="ruleAgendadaMode"><option value="count_all">Contagem simples</option><option value="count_filtered">Contagem com filtro</option></select></td><td><select class="sort-select" id="ruleAgendadaColumn"><option value="">Selecionar coluna</option></select></td><td><input class="funnel-input" id="ruleAgendadaValue" placeholder="Ex: contato"></td><td><label class="toggle-switch" style="margin-left:0;"><input type="checkbox" id="ruleAgendadaRequirePaid" checked><span class="toggle-track"><span class="toggle-thumb"></span></span><span class="toggle-label">UTM</span></label></td></tr>
+            <tr><td class="td-mono">Call Confirmada</td><td><select class="sort-select" id="ruleConfirmadaMode"><option value="count_all">Contagem simples</option><option value="count_filtered">Contagem com filtro</option></select></td><td><select class="sort-select" id="ruleConfirmadaColumn"><option value="">Selecionar coluna</option></select></td><td><input class="funnel-input" id="ruleConfirmadaValue" placeholder="Ex: confirmada"></td><td><label class="toggle-switch" style="margin-left:0;"><input type="checkbox" id="ruleConfirmadaRequirePaid" checked><span class="toggle-track"><span class="toggle-thumb"></span></span><span class="toggle-label">UTM</span></label></td></tr>
+            <tr><td class="td-mono">No-Show</td><td><select class="sort-select" id="ruleNoShowMode"><option value="count_all">Contagem simples</option><option value="count_filtered">Contagem com filtro</option></select></td><td><select class="sort-select" id="ruleNoShowColumn"><option value="">Selecionar coluna</option></select></td><td><input class="funnel-input" id="ruleNoShowValue" placeholder="Ex: no-show"></td><td><label class="toggle-switch" style="margin-left:0;"><input type="checkbox" id="ruleNoShowRequirePaid" checked><span class="toggle-track"><span class="toggle-thumb"></span></span><span class="toggle-label">UTM</span></label></td></tr>
+            <tr><td class="td-mono">Call Feita</td><td><select class="sort-select" id="ruleCallFeitaMode"><option value="count_all">Contagem simples</option><option value="count_filtered">Contagem com filtro</option></select></td><td><select class="sort-select" id="ruleCallFeitaColumn"><option value="">Selecionar coluna</option></select></td><td><input class="funnel-input" id="ruleCallFeitaValue" placeholder="Ex: call feita"></td><td><label class="toggle-switch" style="margin-left:0;"><input type="checkbox" id="ruleCallFeitaRequirePaid" checked><span class="toggle-track"><span class="toggle-thumb"></span></span><span class="toggle-label">UTM</span></label></td></tr>
           </tbody>
         </table>
       </div>
-      <div style="display:flex;justify-content:flex-end;margin-top:12px;">
+      <div style="display:flex;justify-content:space-between;gap:8px;align-items:center;margin-top:12px;">
+        <button type="button" class="btn-ghost" style="max-width:240px;margin-top:0;" onclick="autoMapMetricRuleColumns()">Usar nomes detectados</button>
         <button type="button" class="btn-load" style="max-width:240px;margin-top:0;" onclick="closeMetricRulesModal()">Salvar e fechar</button>
       </div>
     </div>
@@ -1530,9 +1531,87 @@ function syncMetricRulesFromConfigInputs() {
   METRIC_RULES = next;
 }
 
+function getColumnsFromRows(rows) {
+  const set = new Set();
+  (rows || []).forEach(r => {
+    Object.keys(r || {}).forEach(k => {
+      const key = String(k || '').trim();
+      if (key) set.add(key);
+    });
+  });
+  return Array.from(set);
+}
+
+function fillMetricColumnSelect(metricKey, suffix) {
+  const sel = document.getElementById(`rule${suffix}Column`);
+  if (!sel) return;
+  const rows = getRowsForMetricKey(metricKey);
+  const cols = getColumnsFromRows(rows).sort((a, b) => a.localeCompare(b));
+  const current = String(METRIC_RULES?.[metricKey]?.filterColumn || '').trim();
+  sel.innerHTML = '<option value="">Selecionar coluna</option>';
+  cols.forEach(c => {
+    const opt = document.createElement('option');
+    opt.value = c;
+    opt.textContent = c;
+    sel.appendChild(opt);
+  });
+  if (current && !cols.includes(current)) {
+    const opt = document.createElement('option');
+    opt.value = current;
+    opt.textContent = `${current} (salva)`;
+    sel.appendChild(opt);
+  }
+  sel.value = current;
+}
+
+function populateMetricRuleColumnOptions() {
+  fillMetricColumnSelect('lead', 'Lead');
+  fillMetricColumnSelect('mql', 'Mql');
+  fillMetricColumnSelect('agendada', 'Agendada');
+  fillMetricColumnSelect('confirmada', 'Confirmada');
+  fillMetricColumnSelect('noShow', 'NoShow');
+  fillMetricColumnSelect('callFeita', 'CallFeita');
+}
+
+function findBestColumnByKeywords(columns, keywords) {
+  if (!columns.length) return '';
+  const normCols = columns.map(c => ({ raw: c, norm: normalizeName(c).replace(/[\s_-]+/g, '') }));
+  for (const k of keywords) {
+    const nk = normalizeName(k).replace(/[\s_-]+/g, '');
+    const exact = normCols.find(c => c.norm === nk);
+    if (exact) return exact.raw;
+  }
+  for (const k of keywords) {
+    const nk = normalizeName(k).replace(/[\s_-]+/g, '');
+    const contains = normCols.find(c => c.norm.includes(nk) || nk.includes(c.norm));
+    if (contains) return contains.raw;
+  }
+  return '';
+}
+
+function autoMapMetricRuleColumns() {
+  const cfg = [
+    ['lead', 'Lead', ['contagem', 'status', 'lead', 'tipo']],
+    ['mql', 'Mql', ['qualificacao', 'qualificação', 'status', 'mql']],
+    ['agendada', 'Agendada', ['status', 'etapa', 'fase', 'agenda']],
+    ['confirmada', 'Confirmada', ['status', 'etapa', 'fase', 'confirmada']],
+    ['noShow', 'NoShow', ['status', 'etapa', 'fase', 'no show', 'noshow']],
+    ['callFeita', 'CallFeita', ['status', 'etapa', 'fase', 'call feita']]
+  ];
+  cfg.forEach(([metricKey, suffix, keywords]) => {
+    const rows = getRowsForMetricKey(metricKey);
+    const cols = getColumnsFromRows(rows);
+    const best = findBestColumnByKeywords(cols, keywords);
+    if (!best) return;
+    const sel = document.getElementById(`rule${suffix}Column`);
+    if (sel) sel.value = best;
+  });
+}
+
 function openMetricRulesModal() {
   syncGlobalsFromConfigInputs();
   fillConfigInputsFromGlobals();
+  populateMetricRuleColumnOptions();
   const modal = document.getElementById('metricRulesModal');
   if (modal) modal.style.display = 'flex';
 }
