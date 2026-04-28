@@ -38,6 +38,7 @@ Permitir conectar planilhas **privadas** sem expor dados publicamente.
 
 - O padrao e **uma unica planilha Google** com varias abas (paginas), cada uma com seu GID.
 - Modelo recomendado em `templates/padrao-planilha/`.
+- Arquivo pronto: `templates/padrao-planilha/PADRAO_PLANILHA_UNICA.xlsx`.
 - Dentro do dashboard, use o botao **Aplicar padrao (planilha unica com abas)** antes de mapear GIDs.
 - Esse fluxo reduz divergencias entre clientes e facilita reaproveitar regras.
 

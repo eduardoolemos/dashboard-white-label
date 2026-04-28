@@ -3,8 +3,8 @@
 Use este padrao para reduzir configuracoes manuais no dashboard.
 
 Importante: este padrao foi pensado para **uma unica planilha Google** com varias abas.
-Os arquivos `.csv` desta pasta representam exemplos de conteudo de cada aba dessa planilha unica.
-Na pratica, crie as abas com esses nomes dentro da mesma planilha.
+Use o arquivo `PADRAO_PLANILHA_UNICA.xlsx`, que ja vem com todas as abas no mesmo workbook.
+Depois, importe esse arquivo no Google Sheets e ajuste os dados reais.
 
 ## Abas recomendadas
 
