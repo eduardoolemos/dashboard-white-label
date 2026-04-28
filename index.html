@@ -310,6 +310,26 @@ tbody td { padding:11px 12px; font-size:13px; color:var(--text); }
         <input type="text" id="tenantKey" placeholder="Ex: evolving, cliente-x">
         <div class="config-hint">Isola a configuração por cliente usando <code>?tenant=slug</code> na URL.</div>
       </div>
+      <div class="stage-config-wrap">
+        <div class="stage-config-title">Validação de leads</div>
+        <div class="config-hint" style="margin-bottom:10px;">Defina como identificar o que conta como lead na sua planilha.</div>
+        <div class="config-field">
+          <label>Colunas para validar lead (aliases, separados por vírgula)</label>
+          <input type="text" id="leadRuleFieldAliases" placeholder="Ex: qualificação, status, mql">
+          <div class="config-hint">O sistema tenta encontrar qualquer uma dessas colunas por nome normalizado.</div>
+        </div>
+        <div class="config-field">
+          <label>Valores que contam como lead (separados por vírgula)</label>
+          <input type="text" id="leadRulePositiveValues" placeholder="Ex: lead, qualificado, mql, sim">
+        </div>
+        <div class="config-field">
+          <label class="toggle-switch" style="margin-left:0;">
+            <input type="checkbox" id="leadRuleRequirePaid" checked>
+            <span class="toggle-track"><span class="toggle-thumb"></span></span>
+            <span class="toggle-label">Exigir utm_campaign preenchida (somente leads de tráfego)</span>
+          </label>
+        </div>
+      </div>
       <div class="config-field">
         <label>Página/Funil ativo</label>
         <div class="funnel-row">
@@ -870,6 +890,17 @@ try {
   if (saved.gidEtapas) GID_ETAPAS = saved.gidEtapas;
   if (saved.gidConv)   GID_CONV   = saved.gidConv;
   if (saved.gidAds)    GID_ADS    = saved.gidAds;
+  if (saved.leadRules && typeof saved.leadRules === 'object') {
+    LEAD_RULES = {
+      fieldAliases: Array.isArray(saved.leadRules.fieldAliases) && saved.leadRules.fieldAliases.length
+        ? saved.leadRules.fieldAliases.map(v => String(v || '').trim()).filter(Boolean)
+        : DEFAULT_LEAD_RULES.fieldAliases.slice(),
+      positiveValues: Array.isArray(saved.leadRules.positiveValues) && saved.leadRules.positiveValues.length
+        ? saved.leadRules.positiveValues.map(v => String(v || '').trim()).filter(Boolean)
+        : DEFAULT_LEAD_RULES.positiveValues.slice(),
+      requirePaidCampaign: saved.leadRules.requirePaidCampaign !== false
+    };
+  }
   if (saved.activeFunnelId) activeFunnelId = String(saved.activeFunnelId);
   if (Array.isArray(saved.funnels) && saved.funnels.length) {
     FUNNELS = saved.funnels.map((f, i) => ({
@@ -928,6 +959,12 @@ const DEFAULT_VISIBLE_METRICS = [
   'cAgendada','cConfirmada','cNoShow','cCallFeita'
 ];
 let visibleMetrics = new Set(DEFAULT_VISIBLE_METRICS);
+const DEFAULT_LEAD_RULES = {
+  fieldAliases: ['qualificacao', 'qualificado', 'status', 'mql'],
+  positiveValues: ['lead', 'qualificado', 'mql', 'sim', 'true', '1'],
+  requirePaidCampaign: true
+};
+let LEAD_RULES = { ...DEFAULT_LEAD_RULES };
 
 let RAW = { etapas:[], conv:[], ads:[], stages:{} };
 let RAW_CONV_VIEW = [];
@@ -1085,7 +1122,12 @@ function buildSharePayload() {
       GID_ADS,
       activeFunnelId,
       packFunnels(FUNNELS),
-      packStages(STAGE_CONFIGS)
+      packStages(STAGE_CONFIGS),
+      [
+        (LEAD_RULES.fieldAliases || []).join(','),
+        (LEAD_RULES.positiveValues || []).join(','),
+        LEAD_RULES.requirePaidCampaign !== false ? 1 : 0
+      ]
     ],
     t: [
       campaignContains,
@@ -1138,6 +1180,15 @@ try {
     if (Array.isArray(c[6]) && c[6].length) {
       FUNNELS = unpackFunnels(c[6]);
     }
+    if (Array.isArray(c[8])) {
+      LEAD_RULES = {
+        fieldAliases: parseCsvList(c[8][0]),
+        positiveValues: parseCsvList(c[8][1]),
+        requirePaidCampaign: Number(c[8][2]) !== 0
+      };
+      if (!LEAD_RULES.fieldAliases.length) LEAD_RULES.fieldAliases = DEFAULT_LEAD_RULES.fieldAliases.slice();
+      if (!LEAD_RULES.positiveValues.length) LEAD_RULES.positiveValues = DEFAULT_LEAD_RULES.positiveValues.slice();
+    }
     if (c[5]) activeFunnelId = String(c[5]);
     localStorage.setItem(getCfgKey(), JSON.stringify({
       sheetId: SHEET_ID,
@@ -1145,6 +1196,7 @@ try {
       gidEtapas: GID_ETAPAS,
       gidConv: GID_CONV,
       gidAds: GID_ADS,
+      leadRules: LEAD_RULES,
       stageConfigs: STAGE_CONFIGS,
       activeFunnelId,
       funnels: FUNNELS
@@ -1270,6 +1322,7 @@ function persistConfigState() {
       gidEtapas: GID_ETAPAS,
       gidConv: GID_CONV,
       gidAds: GID_ADS,
+      leadRules: LEAD_RULES,
       stageConfigs: STAGE_CONFIGS,
       activeFunnelId,
       funnels: FUNNELS
@@ -1298,7 +1351,33 @@ function fillConfigInputsFromGlobals() {
   document.getElementById('gidAds').value = GID_ADS;
   document.getElementById('defaultCampContains').value = campaignContains;
   document.getElementById('campContains').value = campaignContains;
+  const leadAliases = document.getElementById('leadRuleFieldAliases');
+  const leadPositive = document.getElementById('leadRulePositiveValues');
+  const leadRequirePaid = document.getElementById('leadRuleRequirePaid');
+  if (leadAliases) leadAliases.value = (LEAD_RULES.fieldAliases || []).join(', ');
+  if (leadPositive) leadPositive.value = (LEAD_RULES.positiveValues || []).join(', ');
+  if (leadRequirePaid) leadRequirePaid.checked = LEAD_RULES.requirePaidCampaign !== false;
   renderStageConfigs();
+}
+
+function parseCsvList(v) {
+  return String(v || '')
+    .split(',')
+    .map(s => String(s || '').trim())
+    .filter(Boolean);
+}
+
+function syncLeadRulesFromConfigInputs() {
+  const aliasesInput = document.getElementById('leadRuleFieldAliases')?.value || '';
+  const positiveInput = document.getElementById('leadRulePositiveValues')?.value || '';
+  const requirePaid = !!document.getElementById('leadRuleRequirePaid')?.checked;
+  LEAD_RULES = {
+    fieldAliases: parseCsvList(aliasesInput),
+    positiveValues: parseCsvList(positiveInput),
+    requirePaidCampaign: requirePaid
+  };
+  if (!LEAD_RULES.fieldAliases.length) LEAD_RULES.fieldAliases = DEFAULT_LEAD_RULES.fieldAliases.slice();
+  if (!LEAD_RULES.positiveValues.length) LEAD_RULES.positiveValues = DEFAULT_LEAD_RULES.positiveValues.slice();
 }
 
 function onDefaultCampaignPatternChange(value) {
@@ -2332,8 +2411,18 @@ function getLeadUtmTerm(row) {
 }
 
 function isPaidLeadRow(r) {
+  const aliases = (LEAD_RULES.fieldAliases || []).map(v => String(v || '').trim()).filter(Boolean);
+  const positives = new Set((LEAD_RULES.positiveValues || []).map(v => normalizeName(v)).filter(Boolean));
+  if (aliases.length) {
+    const fieldVal = normalizeName(getLeadFieldValue(r, aliases));
+    if (fieldVal && positives.size && !positives.has(fieldVal)) return false;
+    if (!fieldVal) return false;
+  }
   const camp = getLeadUtmCampaign(r);
-  return !!camp && camp !== '-' && !camp.startsWith('{{');
+  if (LEAD_RULES.requirePaidCampaign !== false) {
+    return !!camp && camp !== '-' && !camp.startsWith('{{');
+  }
+  return true;
 }
 
 function isMqlRow(r) {
@@ -3398,6 +3487,7 @@ function hasMissingMainGids() {
 
 async function saveConfigAndLoad() {
   applyTenantFromInput(true);
+  syncLeadRulesFromConfigInputs();
   const parsedSheet = parseSheetLink(document.getElementById('sheetLink').value);
   if (parsedSheet?.publishedBase) PUBLISHED_BASE = parsedSheet.publishedBase;
   if (parsedSheet?.sheetId) {
