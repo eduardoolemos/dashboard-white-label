@@ -293,7 +293,7 @@ tbody td { padding:11px 12px; font-size:13px; color:var(--text); }
   <div id="configScreen" style="display:none; max-width:560px; margin:40px auto;">
     <div class="config-panel">
       <div class="config-title">Configurar Planilha</div>
-      <div class="config-sub">Conecte via link da planilha. Para modo privado, compartilhe a planilha com o e-mail da Service Account.</div>
+      <div class="config-sub">Use uma unica planilha Google com varias abas (paginas). Para modo privado, compartilhe a planilha com o e-mail da Service Account.</div>
 
       <div class="config-steps">
         <div class="config-step">
@@ -313,7 +313,7 @@ tbody td { padding:11px 12px; font-size:13px; color:var(--text); }
       <div class="config-field">
         <label>Link da planilha (privada ou pública)</label>
         <input type="text" id="sheetLink" placeholder="Cole aqui a URL da planilha do Google Sheets">
-        <div class="config-hint">Recomendado: planilha privada compartilhada com o e-mail da Service Account como leitor.</div>
+        <div class="config-hint">Cole o link da planilha unica. O dashboard usa os GIDs das abas internas.</div>
       </div>
       <div class="config-field">
         <label>Cliente (slug white-label)</label>
@@ -364,7 +364,7 @@ tbody td { padding:11px 12px; font-size:13px; color:var(--text); }
         <div class="stage-config-list" id="stageConfigList"></div>
         <button type="button" class="btn-stage-add" onclick="addStageConfig()">+ Adicionar etapa</button>
       </div>
-      <button type="button" class="btn-ghost" onclick="applySpreadsheetStandard()">Aplicar padrão da planilha</button>
+      <button type="button" class="btn-ghost" onclick="applySpreadsheetStandard()">Aplicar padrão (planilha unica com abas)</button>
       <button type="button" class="btn-ghost" id="btnAutoGid" onclick="autoFillGidsFromSheet()">Buscar GIDs automático</button>
       <div class="config-status" id="autoGidStatus"></div>
       <button type="button" class="btn-ghost" id="btnShortLink" onclick="generateShortShareLink()">Gerar link curto</button>

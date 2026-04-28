@@ -34,10 +34,11 @@ Permitir conectar planilhas **privadas** sem expor dados publicamente.
 - Clique em **Buscar GIDs automático**.
 - Clique em **Carregar Dashboard**.
 
-## Padrao de planilha
+## Padrao de planilha (unica)
 
+- O padrao e **uma unica planilha Google** com varias abas (paginas), cada uma com seu GID.
 - Modelo recomendado em `templates/padrao-planilha/`.
-- Dentro do dashboard, use o botao **Aplicar padrao da planilha** antes de mapear GIDs.
+- Dentro do dashboard, use o botao **Aplicar padrao (planilha unica com abas)** antes de mapear GIDs.
 - Esse fluxo reduz divergencias entre clientes e facilita reaproveitar regras.
 
 ## Observações

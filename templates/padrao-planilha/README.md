@@ -1,6 +1,10 @@
-# Padrao de Planilha (White-Label)
+# Padrao de Planilha Unica (White-Label)
 
 Use este padrao para reduzir configuracoes manuais no dashboard.
+
+Importante: este padrao foi pensado para **uma unica planilha Google** com varias abas.
+Os arquivos `.csv` desta pasta representam exemplos de conteudo de cada aba.
+Na pratica, voce deve criar as abas dentro da mesma planilha (nao planilhas separadas).
 
 ## Abas recomendadas
 
