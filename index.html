@@ -2857,12 +2857,24 @@ function getLeadUtmTerm(row) {
 
 function isPaidCampaignRow(r) {
   const camp = getLeadUtmCampaign(r);
-  return !!camp && camp !== '-' && !camp.startsWith('{{');
+  const norm = normalizeName(camp).replace(/\s+/g, '');
+  if (!camp || camp === '-' || camp.startsWith('{{')) return false;
+  if (!norm || norm === 'semutm' || norm === 'organic' || norm === 'organico') return false;
+  return true;
 }
 
 function rowHasUtmCampaignField(r) {
   const keys = Object.keys(r || {});
   return keys.some((k) => normalizeName(k).replace(/[\s_-]+/g, '') === 'utmcampaign');
+}
+
+function hasAttributionValue(v) {
+  const raw = String(v || '').trim();
+  const norm = normalizeName(raw).replace(/\s+/g, '');
+  if (!raw || raw === '-') return false;
+  if (raw.startsWith('{{')) return false;
+  if (!norm || norm === 'semutm' || norm === 'organic' || norm === 'organico') return false;
+  return true;
 }
 
 function rowMatchesMetricRule(r, rule) {
@@ -2965,9 +2977,9 @@ function countStageInPeriod(rows, filters, metricKey = 'lead') {
     const c = getLeadUtmCampaign(r);
     const a = getLeadUtmContent(r);
     const ad = getLeadUtmTerm(r);
-    const hasCampaign = !!String(c || '').trim();
-    const hasAdset = !!String(a || '').trim();
-    const hasAd = !!String(ad || '').trim();
+    const hasCampaign = hasAttributionValue(c);
+    const hasAdset = hasAttributionValue(a);
+    const hasAd = hasAttributionValue(ad);
     // Não elimina linhas sem UTM por filtros de campanha.
     if (filters.campPattern && hasCampaign && !normKey(c).includes(normKey(filters.campPattern))) return;
     if (filters.fCamp && hasCampaign && c !== filters.fCamp) return;
@@ -3691,9 +3703,9 @@ function renderTrafego() {
         const c = getLeadUtmCampaign(r);
         const a = getLeadUtmContent(r);
         const ad = getLeadUtmTerm(r);
-        const hasCampaign = !!String(c || '').trim();
-        const hasAdset = !!String(a || '').trim();
-        const hasAd = !!String(ad || '').trim();
+        const hasCampaign = hasAttributionValue(c);
+        const hasAdset = hasAttributionValue(a);
+        const hasAd = hasAttributionValue(ad);
         if (campPattern && hasCampaign && !normKey(c).includes(normKey(campPattern))) return;
         if (fCamp && hasCampaign && c !== fCamp) return;
         if (fAdset && hasAdset && a !== fAdset) return;
