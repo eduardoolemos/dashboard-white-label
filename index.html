@@ -316,18 +316,30 @@ tbody td { padding:11px 12px; font-size:13px; color:var(--text); }
         <div class="config-hint" style="margin-bottom:10px;">Cada cliente pode usar perguntas diferentes. Detecte as colunas e o sistema tenta mapear automaticamente; se precisar, ajuste manualmente abaixo.</div>
         <button class="btn-ghost" type="button" onclick="autoMapSurveyFieldsFromDetectedColumns()">Preencher mapeamento automático</button>
         <div class="config-status" id="surveyMapStatus"></div>
-        <div class="config-field"><label>Pergunta para Prioridade (texto)</label><input type="text" id="surveyQuestionPrioridade" placeholder="Ex: Qual a prioridade hoje?"></div>
-        <div class="config-field"><label>Coluna para Prioridade</label><select class="camp-select" id="surveyMapPrioridade"></select></div>
-        <div class="config-field"><label>Pergunta para Situação Financeira (texto)</label><input type="text" id="surveyQuestionSituacao" placeholder="Ex: Como está sua situação financeira?"></div>
-        <div class="config-field"><label>Coluna para Situação Financeira</label><select class="camp-select" id="surveyMapSituacao"></select></div>
-        <div class="config-field"><label>Pergunta para Urgência (texto)</label><input type="text" id="surveyQuestionUrgencia" placeholder="Ex: Qual o nível de urgência?"></div>
-        <div class="config-field"><label>Coluna para Urgência</label><select class="camp-select" id="surveyMapUrgencia"></select></div>
-        <div class="config-field"><label>Pergunta para Estoque (texto)</label><input type="text" id="surveyQuestionEstoque" placeholder="Ex: Como está seu estoque?"></div>
-        <div class="config-field"><label>Coluna para Estoque</label><select class="camp-select" id="surveyMapEstoque"></select></div>
-        <div class="config-field"><label>Pergunta para Faturamento (texto)</label><input type="text" id="surveyQuestionFaturamento" placeholder="Ex: Qual faixa de faturamento?"></div>
-        <div class="config-field"><label>Coluna para Faturamento</label><select class="camp-select" id="surveyMapFaturamento"></select></div>
-        <div class="config-field"><label>Pergunta para Lojista / Tipo de Negócio (texto)</label><input type="text" id="surveyQuestionLojista" placeholder="Ex: Você é lojista?"></div>
-        <div class="config-field"><label>Coluna para Lojista / Tipo de Negócio</label><select class="camp-select" id="surveyMapLojista"></select></div>
+        <div class="config-field" style="display:grid;grid-template-columns:1fr 230px;gap:10px;align-items:end;">
+          <div><label>Prioridade (pergunta)</label><input type="text" id="surveyQuestionPrioridade" placeholder="Ex: Qual a prioridade hoje?"></div>
+          <div><label>Coluna</label><select class="camp-select" id="surveyMapPrioridade"></select></div>
+        </div>
+        <div class="config-field" style="display:grid;grid-template-columns:1fr 230px;gap:10px;align-items:end;">
+          <div><label>Situação Financeira (pergunta)</label><input type="text" id="surveyQuestionSituacao" placeholder="Ex: Como está sua situação financeira?"></div>
+          <div><label>Coluna</label><select class="camp-select" id="surveyMapSituacao"></select></div>
+        </div>
+        <div class="config-field" style="display:grid;grid-template-columns:1fr 230px;gap:10px;align-items:end;">
+          <div><label>Urgência (pergunta)</label><input type="text" id="surveyQuestionUrgencia" placeholder="Ex: Qual o nível de urgência?"></div>
+          <div><label>Coluna</label><select class="camp-select" id="surveyMapUrgencia"></select></div>
+        </div>
+        <div class="config-field" style="display:grid;grid-template-columns:1fr 230px;gap:10px;align-items:end;">
+          <div><label>Estoque (pergunta)</label><input type="text" id="surveyQuestionEstoque" placeholder="Ex: Como está seu estoque?"></div>
+          <div><label>Coluna</label><select class="camp-select" id="surveyMapEstoque"></select></div>
+        </div>
+        <div class="config-field" style="display:grid;grid-template-columns:1fr 230px;gap:10px;align-items:end;">
+          <div><label>Faturamento (pergunta)</label><input type="text" id="surveyQuestionFaturamento" placeholder="Ex: Qual faixa de faturamento?"></div>
+          <div><label>Coluna</label><select class="camp-select" id="surveyMapFaturamento"></select></div>
+        </div>
+        <div class="config-field" style="display:grid;grid-template-columns:1fr 230px;gap:10px;align-items:end;">
+          <div><label>Lojista / Tipo de Negócio (pergunta)</label><input type="text" id="surveyQuestionLojista" placeholder="Ex: Você é lojista?"></div>
+          <div><label>Coluna</label><select class="camp-select" id="surveyMapLojista"></select></div>
+        </div>
       </div>
       <div class="stage-config-wrap">
         <div class="stage-config-title">Regras de qualificação</div>
