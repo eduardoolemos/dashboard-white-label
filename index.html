@@ -297,6 +297,18 @@ tbody td { padding:11px 12px; font-size:13px; color:var(--text); }
     <div class="config-panel" style="max-width:880px;">
       <div class="config-title">Config Pesquisa</div>
       <div class="config-sub">Mapeie as perguntas/colunas da planilha para os campos usados na aba de Conversões.</div>
+      <div class="config-field">
+        <label>Link da planilha (privada ou pública)</label>
+        <input type="text" id="sheetLinkPesquisa" placeholder="Cole aqui a URL da planilha do Google Sheets">
+        <div class="config-hint">Cole o link da planilha única para buscar automaticamente a aba de conversões.</div>
+      </div>
+      <div class="config-field">
+        <label>GID da aba "CONVERSOES"</label>
+        <input type="text" id="gidConversoes" placeholder="0">
+        <div class="config-hint">Leads que completaram o funil.</div>
+      </div>
+      <button class="btn-ghost" type="button" onclick="autoFillConversionGidFromSheet()">Buscar GID de conversões</button>
+      <div class="config-status" id="autoConvGidStatus"></div>
       <div class="config-field"><label>Prioridade (aliases, separados por vírgula)</label><input type="text" id="surveyPrioridadeAliases"></div>
       <div class="config-field"><label>Situação Financeira (aliases)</label><input type="text" id="surveySituacaoAliases"></div>
       <div class="config-field"><label>Urgência (aliases)</label><input type="text" id="surveyUrgenciaAliases"></div>
@@ -320,19 +332,14 @@ tbody td { padding:11px 12px; font-size:13px; color:var(--text); }
         </div>
         <div class="config-step">
           <div class="step-num">2</div>
-          <div class="step-txt">Cole o link da planilha abaixo. Pode ser link normal (<code>/d/&lt;id&gt;</code>) para acesso privado.</div>
+          <div class="step-txt">Na aba <strong>Config Pesquisa</strong>, cole o link da planilha (link normal <code>/d/&lt;id&gt;</code> funciona para acesso privado).</div>
         </div>
         <div class="config-step">
           <div class="step-num">3</div>
-          <div class="step-txt">Clique em <strong>Buscar GIDs automático</strong> para preencher os GIDs pelas abas da planilha</div>
+          <div class="step-txt">Use <strong>Buscar GID de conversões</strong> na aba Config Pesquisa, e depois preencha os demais GIDs aqui.</div>
         </div>
       </div>
 
-      <div class="config-field">
-        <label>Link da planilha (privada ou pública)</label>
-        <input type="text" id="sheetLink" placeholder="Cole aqui a URL da planilha do Google Sheets">
-        <div class="config-hint">Cole o link da planilha unica. O dashboard usa os GIDs das abas internas.</div>
-      </div>
       <div class="config-field">
         <label>Cliente (slug white-label)</label>
         <input type="text" id="tenantKey" placeholder="Ex: evolving, cliente-x">
@@ -365,11 +372,6 @@ tbody td { padding:11px 12px; font-size:13px; color:var(--text); }
         <label>GID da aba "TRACK ETAPAS"</label>
         <input type="text" id="gidEtapas" placeholder="0">
         <div class="config-hint">Tracking de etapas do funil</div>
-      </div>
-      <div class="config-field">
-        <label>GID da aba "CONVERSOES"</label>
-        <input type="text" id="gidConversoes" placeholder="0">
-        <div class="config-hint">Leads que completaram o funil</div>
       </div>
       <div class="config-field">
         <label>GID da aba "EXTRAÇÃO GERENCIADOR" (Meta Ads)</label>
@@ -2119,7 +2121,7 @@ async function autoFillGidsFromSheet() {
   btn.textContent = 'Buscando...';
   status.textContent = 'Lendo abas da planilha e comparando nomes...';
   try {
-    const parsed = parseSheetLink(document.getElementById('sheetLink').value);
+    const parsed = parseSheetLink(document.getElementById('sheetLinkPesquisa')?.value);
     if (parsed?.publishedBase) PUBLISHED_BASE = parsed.publishedBase;
     if (parsed?.sheetId) {
       SHEET_ID = parsed.sheetId;
@@ -2167,6 +2169,33 @@ async function autoFillGidsFromSheet() {
   } finally {
     btn.disabled = false;
     btn.textContent = 'Buscar GIDs automático';
+  }
+}
+
+async function autoFillConversionGidFromSheet() {
+  const status = document.getElementById('autoConvGidStatus');
+  if (status) status.textContent = 'Buscando aba de conversões...';
+  try {
+    const parsed = parseSheetLink(document.getElementById('sheetLinkPesquisa')?.value);
+    if (!parsed) throw new Error('Cole um link válido da planilha.');
+    if (parsed?.publishedBase) PUBLISHED_BASE = parsed.publishedBase;
+    if (parsed?.sheetId) {
+      SHEET_ID = parsed.sheetId;
+      EXPORT_BASE = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv`;
+    }
+    const tabs = await fetchSheetTabs();
+    let gid = findBestGidByName('conversoes', tabs)
+      || findBestGidByName('conversões', tabs)
+      || findBestGidByName('leads', tabs);
+    if (!gid) throw new Error('Não encontrei uma aba parecida com "Conversões" ou "Leads".');
+    const gidInput = document.getElementById('gidConversoes');
+    if (gidInput) gidInput.value = gid;
+    syncGlobalsFromConfigInputs();
+    syncGlobalsToActiveFunnel();
+    persistConfigState();
+    if (status) status.textContent = `GID de conversões detectado: ${gid}`;
+  } catch (e) {
+    if (status) status.textContent = `Falha ao detectar GID: ${e.message}`;
   }
 }
 
@@ -4155,7 +4184,7 @@ async function saveConfigAndLoad() {
   applyTenantFromInput(true);
   syncMetricRulesFromConfigInputs();
   refreshMetricStageSources();
-  const parsedSheet = parseSheetLink(document.getElementById('sheetLink').value);
+  const parsedSheet = parseSheetLink(document.getElementById('sheetLinkPesquisa')?.value);
   if (parsedSheet?.publishedBase) PUBLISHED_BASE = parsedSheet.publishedBase;
   if (parsedSheet?.sheetId) {
     SHEET_ID = parsedSheet.sheetId;
@@ -4180,7 +4209,7 @@ async function saveConfigAndLoad() {
 }
 
 // ── INIT ────────────────────────────────
-document.getElementById('sheetLink').value     = PUBLISHED_BASE;
+document.getElementById('sheetLinkPesquisa').value = PUBLISHED_BASE;
 document.getElementById('tenantKey').value     = CLIENT_KEY;
 document.getElementById('brandNameInput').value = BRAND_NAME;
 document.getElementById('campContains').value  = campaignContains;
