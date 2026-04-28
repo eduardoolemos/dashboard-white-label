@@ -316,12 +316,18 @@ tbody td { padding:11px 12px; font-size:13px; color:var(--text); }
         <div class="config-hint" style="margin-bottom:10px;">Cada cliente pode usar perguntas diferentes. Detecte as colunas e o sistema tenta mapear automaticamente; se precisar, ajuste manualmente abaixo.</div>
         <button class="btn-ghost" type="button" onclick="autoMapSurveyFieldsFromDetectedColumns()">Preencher mapeamento automático</button>
         <div class="config-status" id="surveyMapStatus"></div>
-        <div class="config-field"><label>Pergunta para Prioridade</label><select class="camp-select" id="surveyMapPrioridade"></select></div>
-        <div class="config-field"><label>Pergunta para Situação Financeira</label><select class="camp-select" id="surveyMapSituacao"></select></div>
-        <div class="config-field"><label>Pergunta para Urgência</label><select class="camp-select" id="surveyMapUrgencia"></select></div>
-        <div class="config-field"><label>Pergunta para Estoque</label><select class="camp-select" id="surveyMapEstoque"></select></div>
-        <div class="config-field"><label>Pergunta para Faturamento</label><select class="camp-select" id="surveyMapFaturamento"></select></div>
-        <div class="config-field"><label>Pergunta para Lojista / Tipo de Negócio</label><select class="camp-select" id="surveyMapLojista"></select></div>
+        <div class="config-field"><label>Pergunta para Prioridade (texto)</label><input type="text" id="surveyQuestionPrioridade" placeholder="Ex: Qual a prioridade hoje?"></div>
+        <div class="config-field"><label>Coluna para Prioridade</label><select class="camp-select" id="surveyMapPrioridade"></select></div>
+        <div class="config-field"><label>Pergunta para Situação Financeira (texto)</label><input type="text" id="surveyQuestionSituacao" placeholder="Ex: Como está sua situação financeira?"></div>
+        <div class="config-field"><label>Coluna para Situação Financeira</label><select class="camp-select" id="surveyMapSituacao"></select></div>
+        <div class="config-field"><label>Pergunta para Urgência (texto)</label><input type="text" id="surveyQuestionUrgencia" placeholder="Ex: Qual o nível de urgência?"></div>
+        <div class="config-field"><label>Coluna para Urgência</label><select class="camp-select" id="surveyMapUrgencia"></select></div>
+        <div class="config-field"><label>Pergunta para Estoque (texto)</label><input type="text" id="surveyQuestionEstoque" placeholder="Ex: Como está seu estoque?"></div>
+        <div class="config-field"><label>Coluna para Estoque</label><select class="camp-select" id="surveyMapEstoque"></select></div>
+        <div class="config-field"><label>Pergunta para Faturamento (texto)</label><input type="text" id="surveyQuestionFaturamento" placeholder="Ex: Qual faixa de faturamento?"></div>
+        <div class="config-field"><label>Coluna para Faturamento</label><select class="camp-select" id="surveyMapFaturamento"></select></div>
+        <div class="config-field"><label>Pergunta para Lojista / Tipo de Negócio (texto)</label><input type="text" id="surveyQuestionLojista" placeholder="Ex: Você é lojista?"></div>
+        <div class="config-field"><label>Coluna para Lojista / Tipo de Negócio</label><select class="camp-select" id="surveyMapLojista"></select></div>
       </div>
       <div class="stage-config-wrap">
         <div class="stage-config-title">Regras de qualificação</div>
@@ -1053,6 +1059,14 @@ const DEFAULT_SURVEY_CONFIG = {
     faturamento: '',
     lojista: ''
   },
+  fieldQuestions: {
+    prioridade: '',
+    situacao: '',
+    urgencia: '',
+    estoque: '',
+    faturamento: '',
+    lojista: ''
+  },
   detectedColumns: [],
   qualificationRules: [
     { column: '', operator: 'contains', value: 'sim' },
@@ -1064,6 +1078,7 @@ let SURVEY_CONFIG = JSON.parse(JSON.stringify(DEFAULT_SURVEY_CONFIG));
 function normalizeSurveyConfig(raw) {
   const source = raw && typeof raw === 'object' ? raw : {};
   const fieldMap = source.fieldMap && typeof source.fieldMap === 'object' ? source.fieldMap : {};
+  const fieldQuestions = source.fieldQuestions && typeof source.fieldQuestions === 'object' ? source.fieldQuestions : {};
   const qualificationRulesRaw = Array.isArray(source.qualificationRules) ? source.qualificationRules : [];
   const qualificationRules = qualificationRulesRaw
     .map((r) => ({
@@ -1086,6 +1101,14 @@ function normalizeSurveyConfig(raw) {
       estoque: String(fieldMap.estoque || ''),
       faturamento: String(fieldMap.faturamento || ''),
       lojista: String(fieldMap.lojista || '')
+    },
+    fieldQuestions: {
+      prioridade: String(fieldQuestions.prioridade || ''),
+      situacao: String(fieldQuestions.situacao || ''),
+      urgencia: String(fieldQuestions.urgencia || ''),
+      estoque: String(fieldQuestions.estoque || ''),
+      faturamento: String(fieldQuestions.faturamento || ''),
+      lojista: String(fieldQuestions.lojista || '')
     },
     detectedColumns: Array.isArray(source.detectedColumns)
       ? source.detectedColumns.map((c) => String(c || '').trim()).filter(Boolean)
@@ -1759,6 +1782,16 @@ function fillSurveyConfigInputs() {
   set('surveyEstoqueAliases', SURVEY_CONFIG.estoqueAliases);
   set('surveyFaturamentoAliases', SURVEY_CONFIG.faturamentoAliases);
   set('surveyLojistaAliases', SURVEY_CONFIG.lojistaAliases);
+  const setVal = (id, value) => {
+    const el = document.getElementById(id);
+    if (el) el.value = String(value || '');
+  };
+  setVal('surveyQuestionPrioridade', SURVEY_CONFIG.fieldQuestions?.prioridade || '');
+  setVal('surveyQuestionSituacao', SURVEY_CONFIG.fieldQuestions?.situacao || '');
+  setVal('surveyQuestionUrgencia', SURVEY_CONFIG.fieldQuestions?.urgencia || '');
+  setVal('surveyQuestionEstoque', SURVEY_CONFIG.fieldQuestions?.estoque || '');
+  setVal('surveyQuestionFaturamento', SURVEY_CONFIG.fieldQuestions?.faturamento || '');
+  setVal('surveyQuestionLojista', SURVEY_CONFIG.fieldQuestions?.lojista || '');
   fillSurveyMappingSelects();
   renderSurveyQualificationRules();
 }
@@ -1819,6 +1852,21 @@ function autoMapSurveyFieldsFromDetectedColumns() {
   pick('faturamento', ['faturamento', 'receita', 'renda', 'ticket medio', 'ticket médio', 'mrr']);
   pick('lojista', ['lojista', 'tipo de negocio', 'tipo de negócio', 'segmento', 'empresa', 'loja']);
   fillSurveyMappingSelects();
+  const setQuestionIfEmpty = (mapKey, inputId) => {
+    const currentQ = String(SURVEY_CONFIG.fieldQuestions?.[mapKey] || '').trim();
+    if (currentQ) return;
+    const mapped = String(SURVEY_CONFIG.fieldMap?.[mapKey] || '').trim();
+    if (!mapped) return;
+    SURVEY_CONFIG.fieldQuestions[mapKey] = mapped;
+    const el = document.getElementById(inputId);
+    if (el) el.value = mapped;
+  };
+  setQuestionIfEmpty('prioridade', 'surveyQuestionPrioridade');
+  setQuestionIfEmpty('situacao', 'surveyQuestionSituacao');
+  setQuestionIfEmpty('urgencia', 'surveyQuestionUrgencia');
+  setQuestionIfEmpty('estoque', 'surveyQuestionEstoque');
+  setQuestionIfEmpty('faturamento', 'surveyQuestionFaturamento');
+  setQuestionIfEmpty('lojista', 'surveyQuestionLojista');
   const after = JSON.stringify(SURVEY_CONFIG.fieldMap || {});
   const status = document.getElementById('surveyMapStatus');
   if (status) status.textContent = before === after
@@ -1896,6 +1944,14 @@ function saveSurveyConfig() {
       value: String(r?.value || '').trim()
     }))
     .filter((r) => r.column && r.value);
+  const fieldQuestions = {
+    prioridade: String(document.getElementById('surveyQuestionPrioridade')?.value || '').trim(),
+    situacao: String(document.getElementById('surveyQuestionSituacao')?.value || '').trim(),
+    urgencia: String(document.getElementById('surveyQuestionUrgencia')?.value || '').trim(),
+    estoque: String(document.getElementById('surveyQuestionEstoque')?.value || '').trim(),
+    faturamento: String(document.getElementById('surveyQuestionFaturamento')?.value || '').trim(),
+    lojista: String(document.getElementById('surveyQuestionLojista')?.value || '').trim()
+  };
   SURVEY_CONFIG = {
     prioridadeAliases: parseAliasInput(document.getElementById('surveyPrioridadeAliases')?.value, DEFAULT_SURVEY_CONFIG.prioridadeAliases),
     situacaoAliases: parseAliasInput(document.getElementById('surveySituacaoAliases')?.value, DEFAULT_SURVEY_CONFIG.situacaoAliases),
@@ -1904,6 +1960,7 @@ function saveSurveyConfig() {
     faturamentoAliases: parseAliasInput(document.getElementById('surveyFaturamentoAliases')?.value, DEFAULT_SURVEY_CONFIG.faturamentoAliases),
     lojistaAliases: parseAliasInput(document.getElementById('surveyLojistaAliases')?.value, DEFAULT_SURVEY_CONFIG.lojistaAliases),
     fieldMap,
+    fieldQuestions,
     detectedColumns: getSurveyColumnOptions(),
     qualificationRules: qualificationRules.length ? qualificationRules : JSON.parse(JSON.stringify(DEFAULT_SURVEY_CONFIG.qualificationRules))
   };
@@ -1935,6 +1992,16 @@ function getSurveyValue(row, mapKey, aliasKey, getFieldByAliasesFn) {
   const mapped = String(SURVEY_CONFIG?.fieldMap?.[mapKey] || '').trim();
   const byMap = getFieldByMappedColumn(row, mapped);
   if (byMap) return byMap;
+  const questionText = String(SURVEY_CONFIG?.fieldQuestions?.[mapKey] || '').trim();
+  if (questionText) {
+    const keys = Object.keys(row || {});
+    const nq = normalizeName(questionText).replace(/\s+/g, '');
+    const keyByQuestion = keys.find((k) => {
+      const nk = normalizeName(k).replace(/\s+/g, '');
+      return nk.includes(nq) || nq.includes(nk);
+    });
+    if (keyByQuestion) return String(row[keyByQuestion] || '').trim();
+  }
   return getFieldByAliasesFn(row, getSurveyAliases(aliasKey));
 }
 
