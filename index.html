@@ -313,7 +313,9 @@ tbody td { padding:11px 12px; font-size:13px; color:var(--text); }
       <div class="config-status" id="surveyColumnsStatus"></div>
       <div class="stage-config-wrap">
         <div class="stage-config-title">Mapeamento de perguntas (seleção por coluna)</div>
-        <div class="config-hint" style="margin-bottom:10px;">Selecione qual coluna da planilha alimenta cada campo do dashboard.</div>
+        <div class="config-hint" style="margin-bottom:10px;">Cada cliente pode usar perguntas diferentes. Detecte as colunas e o sistema tenta mapear automaticamente; se precisar, ajuste manualmente abaixo.</div>
+        <button class="btn-ghost" type="button" onclick="autoMapSurveyFieldsFromDetectedColumns()">Preencher mapeamento automático</button>
+        <div class="config-status" id="surveyMapStatus"></div>
         <div class="config-field"><label>Pergunta para Prioridade</label><select class="camp-select" id="surveyMapPrioridade"></select></div>
         <div class="config-field"><label>Pergunta para Situação Financeira</label><select class="camp-select" id="surveyMapSituacao"></select></div>
         <div class="config-field"><label>Pergunta para Urgência</label><select class="camp-select" id="surveyMapUrgencia"></select></div>
@@ -1803,6 +1805,33 @@ function fillSurveyMappingSelects() {
   fillSelectOptions('surveyMapLojista', cols, SURVEY_CONFIG.fieldMap?.lojista || '', 'Selecionar coluna');
 }
 
+function autoMapSurveyFieldsFromDetectedColumns() {
+  const cols = getSurveyColumnOptions();
+  if (!cols.length) {
+    const status = document.getElementById('surveyMapStatus');
+    if (status) status.textContent = 'Nenhuma coluna detectada ainda. Clique em "Detectar perguntas da aba de conversões".';
+    return;
+  }
+  const before = JSON.stringify(SURVEY_CONFIG.fieldMap || {});
+  const pick = (mapKey, keywords) => {
+    const best = findBestColumnByKeywords(cols, keywords);
+    if (!best) return;
+    SURVEY_CONFIG.fieldMap[mapKey] = best;
+  };
+  pick('prioridade', ['prioridade', 'perfil', 'grau de interesse']);
+  pick('situacao', ['situacao financeira', 'situação financeira', 'financeiro', 'financeira', 'momento financeiro']);
+  pick('urgencia', ['urgencia', 'urgência', 'prazo', 'quando quer', 'imediato']);
+  pick('estoque', ['estoque', 'inventario', 'inventário', 'quantidade de produtos', 'tem produtos']);
+  pick('faturamento', ['faturamento', 'receita', 'renda', 'ticket medio', 'ticket médio', 'mrr']);
+  pick('lojista', ['lojista', 'tipo de negocio', 'tipo de negócio', 'segmento', 'empresa', 'loja']);
+  fillSurveyMappingSelects();
+  const after = JSON.stringify(SURVEY_CONFIG.fieldMap || {});
+  const status = document.getElementById('surveyMapStatus');
+  if (status) status.textContent = before === after
+    ? 'Não encontrei match automático forte. Faça o mapeamento manual.'
+    : 'Mapeamento automático aplicado. Revise e ajuste manualmente se precisar.';
+}
+
 function renderSurveyQualificationRules() {
   const host = document.getElementById('surveyQualificationRules');
   if (!host) return;
@@ -2392,19 +2421,7 @@ async function detectSurveyColumns() {
     const cols = getColumnsFromRows(rows).sort((a, b) => a.localeCompare(b));
     if (!cols.length) throw new Error('Nenhuma coluna encontrada nesta aba.');
     SURVEY_CONFIG.detectedColumns = cols;
-    const autoSet = (mapKey, keywords) => {
-      const current = String(SURVEY_CONFIG.fieldMap?.[mapKey] || '').trim();
-      if (current) return;
-      const best = findBestColumnByKeywords(cols, keywords);
-      if (!best) return;
-      SURVEY_CONFIG.fieldMap[mapKey] = best;
-    };
-    autoSet('prioridade', ['prioridade']);
-    autoSet('situacao', ['situação financeira', 'situacao financeira', 'financeira']);
-    autoSet('urgencia', ['urgência', 'urgencia']);
-    autoSet('estoque', ['estoque']);
-    autoSet('faturamento', ['faturamento lojista', 'faturamento']);
-    autoSet('lojista', ['você é lojista', 'voce e lojista', 'lojista', 'tipo de negócio', 'tipo de negocio']);
+    autoMapSurveyFieldsFromDetectedColumns();
     fillSurveyMappingSelects();
     renderSurveyQualificationRules();
     persistConfigState();
