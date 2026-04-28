@@ -282,6 +282,7 @@ tbody td { padding:11px 12px; font-size:13px; color:var(--text); }
   <div class="tab" style="display:none;" onclick="switchTab('funil')">Funil de Etapas</div>
   <div class="tab active" onclick="switchTab('conversoes')">Conversões</div>
   <div class="tab" onclick="switchTab('trafego')">Métricas de Tráfego</div>
+  <div class="tab" onclick="switchTab('pesquisa')">Config Pesquisa</div>
   <div class="tab" onclick="switchTab('config')">Config</div>
 </div>
 
@@ -290,6 +291,21 @@ tbody td { padding:11px 12px; font-size:13px; color:var(--text); }
   <div class="loading" id="loadingScreen">
     <div class="spinner"></div>
     <div class="loading-txt">Conectando à planilha...</div>
+  </div>
+
+  <div id="tabPesquisa" style="display:none;">
+    <div class="config-panel" style="max-width:880px;">
+      <div class="config-title">Config Pesquisa</div>
+      <div class="config-sub">Mapeie as perguntas/colunas da planilha para os campos usados na aba de Conversões.</div>
+      <div class="config-field"><label>Prioridade (aliases, separados por vírgula)</label><input type="text" id="surveyPrioridadeAliases"></div>
+      <div class="config-field"><label>Situação Financeira (aliases)</label><input type="text" id="surveySituacaoAliases"></div>
+      <div class="config-field"><label>Urgência (aliases)</label><input type="text" id="surveyUrgenciaAliases"></div>
+      <div class="config-field"><label>Estoque (aliases)</label><input type="text" id="surveyEstoqueAliases"></div>
+      <div class="config-field"><label>Faturamento (aliases)</label><input type="text" id="surveyFaturamentoAliases"></div>
+      <div class="config-field"><label>Lojista / Tipo de Negócio (aliases)</label><input type="text" id="surveyLojistaAliases"></div>
+      <button class="btn-load" type="button" onclick="saveSurveyConfig()">Salvar configuração de pesquisa</button>
+      <div class="config-status" id="surveyConfigStatus"></div>
+    </div>
   </div>
 
   <div id="configScreen" style="display:none; max-width:560px; margin:40px auto;">
@@ -1006,6 +1022,15 @@ const DEFAULT_METRIC_RULES = {
   }
 };
 let METRIC_RULES = JSON.parse(JSON.stringify(DEFAULT_METRIC_RULES));
+const DEFAULT_SURVEY_CONFIG = {
+  prioridadeAliases: ['Prioridade'],
+  situacaoAliases: ['Situação Financeira', 'Situacao Financeira'],
+  urgenciaAliases: ['Urgência', 'Urgencia'],
+  estoqueAliases: ['Estoque'],
+  faturamentoAliases: ['Faturamento lojista', 'Faturamento'],
+  lojistaAliases: ['Lojista', 'Você é lojista', 'Voce e lojista', 'Tipo de Negócio', 'Tipo de Negocio']
+};
+let SURVEY_CONFIG = JSON.parse(JSON.stringify(DEFAULT_SURVEY_CONFIG));
 
 function findStageSourceByAliases(aliases) {
   const wanted = aliases.map(a => normalizeName(a));
@@ -1082,6 +1107,16 @@ try {
   if (saved.sheetId) SHEET_ID = saved.sheetId;
   if (saved.publishedBase) PUBLISHED_BASE = saved.publishedBase;
   if (saved.brandName) BRAND_NAME = String(saved.brandName);
+  if (saved.surveyConfig && typeof saved.surveyConfig === 'object') {
+    SURVEY_CONFIG = {
+      prioridadeAliases: Array.isArray(saved.surveyConfig.prioridadeAliases) ? saved.surveyConfig.prioridadeAliases : DEFAULT_SURVEY_CONFIG.prioridadeAliases,
+      situacaoAliases: Array.isArray(saved.surveyConfig.situacaoAliases) ? saved.surveyConfig.situacaoAliases : DEFAULT_SURVEY_CONFIG.situacaoAliases,
+      urgenciaAliases: Array.isArray(saved.surveyConfig.urgenciaAliases) ? saved.surveyConfig.urgenciaAliases : DEFAULT_SURVEY_CONFIG.urgenciaAliases,
+      estoqueAliases: Array.isArray(saved.surveyConfig.estoqueAliases) ? saved.surveyConfig.estoqueAliases : DEFAULT_SURVEY_CONFIG.estoqueAliases,
+      faturamentoAliases: Array.isArray(saved.surveyConfig.faturamentoAliases) ? saved.surveyConfig.faturamentoAliases : DEFAULT_SURVEY_CONFIG.faturamentoAliases,
+      lojistaAliases: Array.isArray(saved.surveyConfig.lojistaAliases) ? saved.surveyConfig.lojistaAliases : DEFAULT_SURVEY_CONFIG.lojistaAliases
+    };
+  }
   if (saved.gidEtapas) GID_ETAPAS = saved.gidEtapas;
   if (saved.gidConv)   GID_CONV   = saved.gidConv;
   if (saved.gidAds)    GID_ADS    = saved.gidAds;
@@ -1382,7 +1417,8 @@ function buildSharePayload() {
           METRIC_RULES.callFeita.available !== false ? 1 : 0
         ]
       ],
-      BRAND_NAME
+      BRAND_NAME,
+      SURVEY_CONFIG
     ],
     t: [
       campaignContains,
@@ -1454,11 +1490,13 @@ try {
       };
     }
     if (c[9]) BRAND_NAME = String(c[9]);
+    if (c[10] && typeof c[10] === 'object') SURVEY_CONFIG = { ...SURVEY_CONFIG, ...c[10] };
     if (c[5]) activeFunnelId = String(c[5]);
     localStorage.setItem(getCfgKey(), JSON.stringify({
       sheetId: SHEET_ID,
       publishedBase: PUBLISHED_BASE,
       brandName: BRAND_NAME,
+      surveyConfig: SURVEY_CONFIG,
       gidEtapas: GID_ETAPAS,
       gidConv: GID_CONV,
       gidAds: GID_ADS,
@@ -1544,13 +1582,14 @@ EXPORT_BASE = SHEET_ID ? `https://docs.google.com/spreadsheets/d/${SHEET_ID}/exp
 // ── TAB ────────────────────────────────
 function switchTab(tab) {
   currentTab = tab;
-  const tabs = ['funil','conversoes','trafego','config'];
+  const tabs = ['funil','conversoes','trafego','pesquisa','config'];
   document.querySelectorAll('.tab').forEach((t,i) => {
     t.classList.toggle('active', tabs[i] === tab);
   });
   document.getElementById('tabFunil').style.display       = tab==='funil'       ? 'block' : 'none';
   document.getElementById('tabConversoes').style.display  = tab==='conversoes'  ? 'block' : 'none';
   document.getElementById('tabTrafego').style.display     = tab==='trafego'     ? 'block' : 'none';
+  document.getElementById('tabPesquisa').style.display    = tab==='pesquisa'    ? 'block' : 'none';
   document.getElementById('configScreen').style.display   = tab==='config'      ? 'block' : 'none';
   document.getElementById('loadingScreen').style.display  = 'none';
   if (tab === 'trafego') renderTrafego();
@@ -1591,6 +1630,7 @@ function persistConfigState() {
       sheetId: SHEET_ID,
       publishedBase: PUBLISHED_BASE,
       brandName: BRAND_NAME,
+      surveyConfig: SURVEY_CONFIG,
       gidEtapas: GID_ETAPAS,
       gidConv: GID_CONV,
       gidAds: GID_ADS,
@@ -1649,6 +1689,48 @@ function fillConfigInputsFromGlobals() {
     if (paid) paid.checked = rule.requirePaidCampaign !== false;
   });
   renderStageConfigs();
+}
+
+function fillSurveyConfigInputs() {
+  const set = (id, arr) => {
+    const el = document.getElementById(id);
+    if (el) el.value = (arr || []).join(', ');
+  };
+  set('surveyPrioridadeAliases', SURVEY_CONFIG.prioridadeAliases);
+  set('surveySituacaoAliases', SURVEY_CONFIG.situacaoAliases);
+  set('surveyUrgenciaAliases', SURVEY_CONFIG.urgenciaAliases);
+  set('surveyEstoqueAliases', SURVEY_CONFIG.estoqueAliases);
+  set('surveyFaturamentoAliases', SURVEY_CONFIG.faturamentoAliases);
+  set('surveyLojistaAliases', SURVEY_CONFIG.lojistaAliases);
+}
+
+function parseAliasInput(v, fallback) {
+  const out = String(v || '')
+    .split(',')
+    .map(x => String(x || '').trim())
+    .filter(Boolean);
+  return out.length ? out : fallback.slice();
+}
+
+function saveSurveyConfig() {
+  SURVEY_CONFIG = {
+    prioridadeAliases: parseAliasInput(document.getElementById('surveyPrioridadeAliases')?.value, DEFAULT_SURVEY_CONFIG.prioridadeAliases),
+    situacaoAliases: parseAliasInput(document.getElementById('surveySituacaoAliases')?.value, DEFAULT_SURVEY_CONFIG.situacaoAliases),
+    urgenciaAliases: parseAliasInput(document.getElementById('surveyUrgenciaAliases')?.value, DEFAULT_SURVEY_CONFIG.urgenciaAliases),
+    estoqueAliases: parseAliasInput(document.getElementById('surveyEstoqueAliases')?.value, DEFAULT_SURVEY_CONFIG.estoqueAliases),
+    faturamentoAliases: parseAliasInput(document.getElementById('surveyFaturamentoAliases')?.value, DEFAULT_SURVEY_CONFIG.faturamentoAliases),
+    lojistaAliases: parseAliasInput(document.getElementById('surveyLojistaAliases')?.value, DEFAULT_SURVEY_CONFIG.lojistaAliases),
+  };
+  persistConfigState();
+  renderConversoes(RAW_CONV_VIEW);
+  const status = document.getElementById('surveyConfigStatus');
+  if (status) status.textContent = 'Configuração de pesquisa salva.';
+}
+
+function getSurveyAliases(key) {
+  const aliases = SURVEY_CONFIG?.[key];
+  if (Array.isArray(aliases) && aliases.length) return aliases;
+  return DEFAULT_SURVEY_CONFIG[key] || [];
 }
 
 function syncMetricRulesFromConfigInputs() {
@@ -2509,8 +2591,8 @@ function renderConversoes(rows) {
       || (txt.includes('menosde') && txt.includes('24000'));
   }
   function isQualifiedLead(row) {
-    const lojista = row.lojista_resp || getFieldByAliases(row, ['Lojista', 'Você é lojista', 'Voce e lojista', 'Tipo de Negócio', 'Tipo de Negocio']);
-    const faturamento = row.faturamento_lojista || getFieldByAliases(row, ['Faturamento lojista', 'Faturamento']);
+    const lojista = row.lojista_resp || getFieldByAliases(row, getSurveyAliases('lojistaAliases'));
+    const faturamento = row.faturamento_lojista || getFieldByAliases(row, getSurveyAliases('faturamentoAliases'));
     return isLojistaAnswer(lojista) && !isExcludedRevenueAnswer(faturamento);
   }
 
@@ -2533,12 +2615,12 @@ function renderConversoes(rows) {
       campanha_resp: getLeadUtmCampaign(src) || String(r.utm_campaign || '').trim(),
       conjunto_resp: getLeadUtmContent(src) || String(r.utm_content || '').trim(),
       anuncio_resp: getLeadUtmTerm(src) || String(r.utm_term || '').trim(),
-      lojista_resp: getFieldByAliases(src, ['Lojista', 'Você é lojista', 'Voce e lojista', 'Tipo de Negócio', 'Tipo de Negocio']),
-      prioridade: getFieldByAliases(src, ['Prioridade']),
-      situacao_financeira: getFieldByAliases(src, ['Situação Financeira', 'Situacao Financeira']),
-      urgencia: getFieldByAliases(src, ['Urgência', 'Urgencia']),
-      estoque: getFieldByAliases(src, ['Estoque']),
-      faturamento_lojista: getFieldByAliases(src, ['Faturamento lojista', 'Faturamento'])
+      lojista_resp: getFieldByAliases(src, getSurveyAliases('lojistaAliases')),
+      prioridade: getFieldByAliases(src, getSurveyAliases('prioridadeAliases')),
+      situacao_financeira: getFieldByAliases(src, getSurveyAliases('situacaoAliases')),
+      urgencia: getFieldByAliases(src, getSurveyAliases('urgenciaAliases')),
+      estoque: getFieldByAliases(src, getSurveyAliases('estoqueAliases')),
+      faturamento_lojista: getFieldByAliases(src, getSurveyAliases('faturamentoAliases'))
     };
   });
 
@@ -4113,6 +4195,7 @@ if (!FUNNELS.some(f => f.id === activeFunnelId)) activeFunnelId = FUNNELS[0].id;
 applyActiveFunnelToGlobals();
 renderFunnelSelectors();
 fillConfigInputsFromGlobals();
+fillSurveyConfigInputs();
 applyBranding();
 writeSharedCfgToUrl(buildSharePayload());
 
