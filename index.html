@@ -316,30 +316,8 @@ tbody td { padding:11px 12px; font-size:13px; color:var(--text); }
         <div class="config-hint" style="margin-bottom:10px;">Cada cliente pode usar perguntas diferentes. Detecte as colunas e o sistema tenta mapear automaticamente; se precisar, ajuste manualmente abaixo.</div>
         <button class="btn-ghost" type="button" onclick="autoMapSurveyFieldsFromDetectedColumns()">Preencher mapeamento automático</button>
         <div class="config-status" id="surveyMapStatus"></div>
-        <div class="config-field" style="display:grid;grid-template-columns:1fr 230px;gap:10px;align-items:end;">
-          <div><label>Prioridade (pergunta)</label><input type="text" id="surveyQuestionPrioridade" placeholder="Ex: Qual a prioridade hoje?"></div>
-          <div><label>Coluna</label><select class="camp-select" id="surveyMapPrioridade"></select></div>
-        </div>
-        <div class="config-field" style="display:grid;grid-template-columns:1fr 230px;gap:10px;align-items:end;">
-          <div><label>Situação Financeira (pergunta)</label><input type="text" id="surveyQuestionSituacao" placeholder="Ex: Como está sua situação financeira?"></div>
-          <div><label>Coluna</label><select class="camp-select" id="surveyMapSituacao"></select></div>
-        </div>
-        <div class="config-field" style="display:grid;grid-template-columns:1fr 230px;gap:10px;align-items:end;">
-          <div><label>Urgência (pergunta)</label><input type="text" id="surveyQuestionUrgencia" placeholder="Ex: Qual o nível de urgência?"></div>
-          <div><label>Coluna</label><select class="camp-select" id="surveyMapUrgencia"></select></div>
-        </div>
-        <div class="config-field" style="display:grid;grid-template-columns:1fr 230px;gap:10px;align-items:end;">
-          <div><label>Estoque (pergunta)</label><input type="text" id="surveyQuestionEstoque" placeholder="Ex: Como está seu estoque?"></div>
-          <div><label>Coluna</label><select class="camp-select" id="surveyMapEstoque"></select></div>
-        </div>
-        <div class="config-field" style="display:grid;grid-template-columns:1fr 230px;gap:10px;align-items:end;">
-          <div><label>Faturamento (pergunta)</label><input type="text" id="surveyQuestionFaturamento" placeholder="Ex: Qual faixa de faturamento?"></div>
-          <div><label>Coluna</label><select class="camp-select" id="surveyMapFaturamento"></select></div>
-        </div>
-        <div class="config-field" style="display:grid;grid-template-columns:1fr 230px;gap:10px;align-items:end;">
-          <div><label>Lojista / Tipo de Negócio (pergunta)</label><input type="text" id="surveyQuestionLojista" placeholder="Ex: Você é lojista?"></div>
-          <div><label>Coluna</label><select class="camp-select" id="surveyMapLojista"></select></div>
-        </div>
+        <div id="surveyQuestionMappings"></div>
+        <button class="btn-stage-add" type="button" onclick="addSurveyQuestionMapping()">+ Adicionar pergunta</button>
       </div>
       <div class="stage-config-wrap">
         <div class="stage-config-title">Regras de qualificação</div>
@@ -1056,6 +1034,14 @@ const DEFAULT_METRIC_RULES = {
   }
 };
 let METRIC_RULES = JSON.parse(JSON.stringify(DEFAULT_METRIC_RULES));
+const SURVEY_TARGET_FIELDS = [
+  { key: 'prioridade', label: 'Prioridade' },
+  { key: 'situacao', label: 'Situação Financeira' },
+  { key: 'urgencia', label: 'Urgência' },
+  { key: 'estoque', label: 'Estoque' },
+  { key: 'faturamento', label: 'Faturamento' },
+  { key: 'lojista', label: 'Lojista / Tipo de Negócio' }
+];
 const DEFAULT_SURVEY_CONFIG = {
   prioridadeAliases: ['Prioridade'],
   situacaoAliases: ['Situação Financeira', 'Situacao Financeira'],
@@ -1079,6 +1065,14 @@ const DEFAULT_SURVEY_CONFIG = {
     faturamento: '',
     lojista: ''
   },
+  questionMappings: [
+    { targetKey: 'prioridade', questionText: '', column: '' },
+    { targetKey: 'situacao', questionText: '', column: '' },
+    { targetKey: 'urgencia', questionText: '', column: '' },
+    { targetKey: 'estoque', questionText: '', column: '' },
+    { targetKey: 'faturamento', questionText: '', column: '' },
+    { targetKey: 'lojista', questionText: '', column: '' }
+  ],
   detectedColumns: [],
   qualificationRules: [
     { column: '', operator: 'contains', value: 'sim' },
@@ -1092,6 +1086,7 @@ function normalizeSurveyConfig(raw) {
   const fieldMap = source.fieldMap && typeof source.fieldMap === 'object' ? source.fieldMap : {};
   const fieldQuestions = source.fieldQuestions && typeof source.fieldQuestions === 'object' ? source.fieldQuestions : {};
   const qualificationRulesRaw = Array.isArray(source.qualificationRules) ? source.qualificationRules : [];
+  const questionMappingsRaw = Array.isArray(source.questionMappings) ? source.questionMappings : [];
   const qualificationRules = qualificationRulesRaw
     .map((r) => ({
       column: String(r?.column || '').trim(),
@@ -1122,6 +1117,18 @@ function normalizeSurveyConfig(raw) {
       faturamento: String(fieldQuestions.faturamento || ''),
       lojista: String(fieldQuestions.lojista || '')
     },
+    questionMappings: (questionMappingsRaw.length
+      ? questionMappingsRaw
+      : SURVEY_TARGET_FIELDS.map((f) => ({
+          targetKey: f.key,
+          questionText: String(fieldQuestions[f.key] || ''),
+          column: String(fieldMap[f.key] || '')
+        }))
+    ).map((m) => ({
+      targetKey: SURVEY_TARGET_FIELDS.some((f) => f.key === String(m?.targetKey || '')) ? String(m.targetKey) : '',
+      questionText: String(m?.questionText || '').trim(),
+      column: String(m?.column || '').trim()
+    })),
     detectedColumns: Array.isArray(source.detectedColumns)
       ? source.detectedColumns.map((c) => String(c || '').trim()).filter(Boolean)
       : [],
@@ -1784,27 +1791,7 @@ function fillConfigInputsFromGlobals() {
 }
 
 function fillSurveyConfigInputs() {
-  const set = (id, arr) => {
-    const el = document.getElementById(id);
-    if (el) el.value = (arr || []).join(', ');
-  };
-  set('surveyPrioridadeAliases', SURVEY_CONFIG.prioridadeAliases);
-  set('surveySituacaoAliases', SURVEY_CONFIG.situacaoAliases);
-  set('surveyUrgenciaAliases', SURVEY_CONFIG.urgenciaAliases);
-  set('surveyEstoqueAliases', SURVEY_CONFIG.estoqueAliases);
-  set('surveyFaturamentoAliases', SURVEY_CONFIG.faturamentoAliases);
-  set('surveyLojistaAliases', SURVEY_CONFIG.lojistaAliases);
-  const setVal = (id, value) => {
-    const el = document.getElementById(id);
-    if (el) el.value = String(value || '');
-  };
-  setVal('surveyQuestionPrioridade', SURVEY_CONFIG.fieldQuestions?.prioridade || '');
-  setVal('surveyQuestionSituacao', SURVEY_CONFIG.fieldQuestions?.situacao || '');
-  setVal('surveyQuestionUrgencia', SURVEY_CONFIG.fieldQuestions?.urgencia || '');
-  setVal('surveyQuestionEstoque', SURVEY_CONFIG.fieldQuestions?.estoque || '');
-  setVal('surveyQuestionFaturamento', SURVEY_CONFIG.fieldQuestions?.faturamento || '');
-  setVal('surveyQuestionLojista', SURVEY_CONFIG.fieldQuestions?.lojista || '');
-  fillSurveyMappingSelects();
+  renderSurveyQuestionMappings();
   renderSurveyQualificationRules();
 }
 
@@ -1834,14 +1821,44 @@ function fillSelectOptions(selectId, options, current, placeholder) {
   sel.value = current || '';
 }
 
-function fillSurveyMappingSelects() {
+function renderSurveyQuestionMappings() {
+  const host = document.getElementById('surveyQuestionMappings');
+  if (!host) return;
   const cols = getSurveyColumnOptions();
-  fillSelectOptions('surveyMapPrioridade', cols, SURVEY_CONFIG.fieldMap?.prioridade || '', 'Selecionar coluna');
-  fillSelectOptions('surveyMapSituacao', cols, SURVEY_CONFIG.fieldMap?.situacao || '', 'Selecionar coluna');
-  fillSelectOptions('surveyMapUrgencia', cols, SURVEY_CONFIG.fieldMap?.urgencia || '', 'Selecionar coluna');
-  fillSelectOptions('surveyMapEstoque', cols, SURVEY_CONFIG.fieldMap?.estoque || '', 'Selecionar coluna');
-  fillSelectOptions('surveyMapFaturamento', cols, SURVEY_CONFIG.fieldMap?.faturamento || '', 'Selecionar coluna');
-  fillSelectOptions('surveyMapLojista', cols, SURVEY_CONFIG.fieldMap?.lojista || '', 'Selecionar coluna');
+  const targetOptions = ['<option value="">Selecionar campo</option>']
+    .concat(SURVEY_TARGET_FIELDS.map((f) => `<option value="${f.key}">${f.label}</option>`))
+    .join('');
+  const rows = Array.isArray(SURVEY_CONFIG.questionMappings) ? SURVEY_CONFIG.questionMappings : [];
+  host.innerHTML = rows.map((m, idx) => {
+    const colOptions = ['<option value="">Selecionar coluna</option>']
+      .concat(cols.map((c) => `<option value="${c.replace(/"/g, '&quot;')}" ${c === m.column ? 'selected' : ''}>${c}</option>`))
+      .join('');
+    return `
+      <div class="stage-row">
+        <select class="camp-select" onchange="onSurveyQuestionMappingChange(${idx}, 'targetKey', this.value)">${targetOptions.replace(`value="${m.targetKey}"`, `value="${m.targetKey}" selected`)}</select>
+        <input type="text" value="${String(m.questionText || '').replace(/"/g, '&quot;')}" placeholder="Texto da pergunta" onchange="onSurveyQuestionMappingChange(${idx}, 'questionText', this.value)">
+        <select class="camp-select" onchange="onSurveyQuestionMappingChange(${idx}, 'column', this.value)">${colOptions}</select>
+        <button class="btn-stage-remove" type="button" onclick="removeSurveyQuestionMapping(${idx})">Excluir</button>
+      </div>
+    `;
+  }).join('');
+}
+
+function addSurveyQuestionMapping() {
+  if (!Array.isArray(SURVEY_CONFIG.questionMappings)) SURVEY_CONFIG.questionMappings = [];
+  SURVEY_CONFIG.questionMappings.push({ targetKey: '', questionText: '', column: '' });
+  renderSurveyQuestionMappings();
+}
+
+function removeSurveyQuestionMapping(index) {
+  if (!Array.isArray(SURVEY_CONFIG.questionMappings)) return;
+  SURVEY_CONFIG.questionMappings.splice(index, 1);
+  renderSurveyQuestionMappings();
+}
+
+function onSurveyQuestionMappingChange(index, field, value) {
+  if (!Array.isArray(SURVEY_CONFIG.questionMappings) || !SURVEY_CONFIG.questionMappings[index]) return;
+  SURVEY_CONFIG.questionMappings[index][field] = String(value || '').trim();
 }
 
 function autoMapSurveyFieldsFromDetectedColumns() {
@@ -1851,11 +1868,17 @@ function autoMapSurveyFieldsFromDetectedColumns() {
     if (status) status.textContent = 'Nenhuma coluna detectada ainda. Clique em "Detectar perguntas da aba de conversões".';
     return;
   }
-  const before = JSON.stringify(SURVEY_CONFIG.fieldMap || {});
+  const before = JSON.stringify(SURVEY_CONFIG.questionMappings || []);
   const pick = (mapKey, keywords) => {
     const best = findBestColumnByKeywords(cols, keywords);
     if (!best) return;
-    SURVEY_CONFIG.fieldMap[mapKey] = best;
+    const exists = (SURVEY_CONFIG.questionMappings || []).find((m) => m.targetKey === mapKey);
+    if (exists) {
+      exists.column = best;
+      if (!exists.questionText) exists.questionText = best;
+      return;
+    }
+    SURVEY_CONFIG.questionMappings.push({ targetKey: mapKey, questionText: best, column: best });
   };
   pick('prioridade', ['prioridade', 'perfil', 'grau de interesse']);
   pick('situacao', ['situacao financeira', 'situação financeira', 'financeiro', 'financeira', 'momento financeiro']);
@@ -1863,23 +1886,8 @@ function autoMapSurveyFieldsFromDetectedColumns() {
   pick('estoque', ['estoque', 'inventario', 'inventário', 'quantidade de produtos', 'tem produtos']);
   pick('faturamento', ['faturamento', 'receita', 'renda', 'ticket medio', 'ticket médio', 'mrr']);
   pick('lojista', ['lojista', 'tipo de negocio', 'tipo de negócio', 'segmento', 'empresa', 'loja']);
-  fillSurveyMappingSelects();
-  const setQuestionIfEmpty = (mapKey, inputId) => {
-    const currentQ = String(SURVEY_CONFIG.fieldQuestions?.[mapKey] || '').trim();
-    if (currentQ) return;
-    const mapped = String(SURVEY_CONFIG.fieldMap?.[mapKey] || '').trim();
-    if (!mapped) return;
-    SURVEY_CONFIG.fieldQuestions[mapKey] = mapped;
-    const el = document.getElementById(inputId);
-    if (el) el.value = mapped;
-  };
-  setQuestionIfEmpty('prioridade', 'surveyQuestionPrioridade');
-  setQuestionIfEmpty('situacao', 'surveyQuestionSituacao');
-  setQuestionIfEmpty('urgencia', 'surveyQuestionUrgencia');
-  setQuestionIfEmpty('estoque', 'surveyQuestionEstoque');
-  setQuestionIfEmpty('faturamento', 'surveyQuestionFaturamento');
-  setQuestionIfEmpty('lojista', 'surveyQuestionLojista');
-  const after = JSON.stringify(SURVEY_CONFIG.fieldMap || {});
+  renderSurveyQuestionMappings();
+  const after = JSON.stringify(SURVEY_CONFIG.questionMappings || []);
   const status = document.getElementById('surveyMapStatus');
   if (status) status.textContent = before === after
     ? 'Não encontrei match automático forte. Faça o mapeamento manual.'
@@ -1941,14 +1949,19 @@ function parseAliasInput(v, fallback) {
 }
 
 function saveSurveyConfig() {
-  const fieldMap = {
-    prioridade: String(document.getElementById('surveyMapPrioridade')?.value || '').trim(),
-    situacao: String(document.getElementById('surveyMapSituacao')?.value || '').trim(),
-    urgencia: String(document.getElementById('surveyMapUrgencia')?.value || '').trim(),
-    estoque: String(document.getElementById('surveyMapEstoque')?.value || '').trim(),
-    faturamento: String(document.getElementById('surveyMapFaturamento')?.value || '').trim(),
-    lojista: String(document.getElementById('surveyMapLojista')?.value || '').trim()
-  };
+  const questionMappings = (SURVEY_CONFIG.questionMappings || [])
+    .map((m) => ({
+      targetKey: String(m?.targetKey || '').trim(),
+      questionText: String(m?.questionText || '').trim(),
+      column: String(m?.column || '').trim()
+    }))
+    .filter((m) => m.targetKey && (m.column || m.questionText));
+  const fieldMap = {};
+  const fieldQuestions = {};
+  questionMappings.forEach((m) => {
+    fieldMap[m.targetKey] = m.column;
+    fieldQuestions[m.targetKey] = m.questionText;
+  });
   const qualificationRules = (SURVEY_CONFIG.qualificationRules || [])
     .map((r) => ({
       column: String(r?.column || '').trim(),
@@ -1956,23 +1969,16 @@ function saveSurveyConfig() {
       value: String(r?.value || '').trim()
     }))
     .filter((r) => r.column && r.value);
-  const fieldQuestions = {
-    prioridade: String(document.getElementById('surveyQuestionPrioridade')?.value || '').trim(),
-    situacao: String(document.getElementById('surveyQuestionSituacao')?.value || '').trim(),
-    urgencia: String(document.getElementById('surveyQuestionUrgencia')?.value || '').trim(),
-    estoque: String(document.getElementById('surveyQuestionEstoque')?.value || '').trim(),
-    faturamento: String(document.getElementById('surveyQuestionFaturamento')?.value || '').trim(),
-    lojista: String(document.getElementById('surveyQuestionLojista')?.value || '').trim()
-  };
   SURVEY_CONFIG = {
-    prioridadeAliases: parseAliasInput(document.getElementById('surveyPrioridadeAliases')?.value, DEFAULT_SURVEY_CONFIG.prioridadeAliases),
-    situacaoAliases: parseAliasInput(document.getElementById('surveySituacaoAliases')?.value, DEFAULT_SURVEY_CONFIG.situacaoAliases),
-    urgenciaAliases: parseAliasInput(document.getElementById('surveyUrgenciaAliases')?.value, DEFAULT_SURVEY_CONFIG.urgenciaAliases),
-    estoqueAliases: parseAliasInput(document.getElementById('surveyEstoqueAliases')?.value, DEFAULT_SURVEY_CONFIG.estoqueAliases),
-    faturamentoAliases: parseAliasInput(document.getElementById('surveyFaturamentoAliases')?.value, DEFAULT_SURVEY_CONFIG.faturamentoAliases),
-    lojistaAliases: parseAliasInput(document.getElementById('surveyLojistaAliases')?.value, DEFAULT_SURVEY_CONFIG.lojistaAliases),
+    prioridadeAliases: DEFAULT_SURVEY_CONFIG.prioridadeAliases,
+    situacaoAliases: DEFAULT_SURVEY_CONFIG.situacaoAliases,
+    urgenciaAliases: DEFAULT_SURVEY_CONFIG.urgenciaAliases,
+    estoqueAliases: DEFAULT_SURVEY_CONFIG.estoqueAliases,
+    faturamentoAliases: DEFAULT_SURVEY_CONFIG.faturamentoAliases,
+    lojistaAliases: DEFAULT_SURVEY_CONFIG.lojistaAliases,
     fieldMap,
     fieldQuestions,
+    questionMappings,
     detectedColumns: getSurveyColumnOptions(),
     qualificationRules: qualificationRules.length ? qualificationRules : JSON.parse(JSON.stringify(DEFAULT_SURVEY_CONFIG.qualificationRules))
   };
@@ -2001,10 +2007,11 @@ function getFieldByMappedColumn(row, column) {
 }
 
 function getSurveyValue(row, mapKey, aliasKey, getFieldByAliasesFn) {
-  const mapped = String(SURVEY_CONFIG?.fieldMap?.[mapKey] || '').trim();
+  const mapping = (SURVEY_CONFIG?.questionMappings || []).find((m) => m.targetKey === mapKey) || {};
+  const mapped = String(mapping.column || SURVEY_CONFIG?.fieldMap?.[mapKey] || '').trim();
   const byMap = getFieldByMappedColumn(row, mapped);
   if (byMap) return byMap;
-  const questionText = String(SURVEY_CONFIG?.fieldQuestions?.[mapKey] || '').trim();
+  const questionText = String(mapping.questionText || SURVEY_CONFIG?.fieldQuestions?.[mapKey] || '').trim();
   if (questionText) {
     const keys = Object.keys(row || {});
     const nq = normalizeName(questionText).replace(/\s+/g, '');
@@ -2495,7 +2502,7 @@ async function detectSurveyColumns() {
     if (!cols.length) throw new Error('Nenhuma coluna encontrada nesta aba.');
     SURVEY_CONFIG.detectedColumns = cols;
     autoMapSurveyFieldsFromDetectedColumns();
-    fillSurveyMappingSelects();
+    renderSurveyQuestionMappings();
     renderSurveyQualificationRules();
     persistConfigState();
     if (status) status.textContent = `Colunas detectadas: ${cols.length}. Selecione as perguntas e salve.`;
