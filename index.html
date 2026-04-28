@@ -2768,10 +2768,16 @@ function isPaidCampaignRow(r) {
   return !!camp && camp !== '-' && !camp.startsWith('{{');
 }
 
+function rowHasUtmCampaignField(r) {
+  const keys = Object.keys(r || {});
+  return keys.some((k) => normalizeName(k).replace(/[\s_-]+/g, '') === 'utmcampaign');
+}
+
 function rowMatchesMetricRule(r, rule) {
   if (!rule) return false;
   if (rule.available === false) return false;
-  if (rule.requirePaidCampaign !== false && !isPaidCampaignRow(r)) return false;
+  // Só exige UTM quando a fonte realmente tem esse campo.
+  if (rule.requirePaidCampaign !== false && rowHasUtmCampaignField(r) && !isPaidCampaignRow(r)) return false;
   if (rule.mode === 'count_filtered') {
     const col = String(rule.filterColumn || '').trim();
     const wanted = normalizeName(rule.filterValue || '');
@@ -2859,10 +2865,14 @@ function countStageInPeriod(rows, filters, metricKey = 'lead') {
     const c = getLeadUtmCampaign(r);
     const a = getLeadUtmContent(r);
     const ad = getLeadUtmTerm(r);
-    if (filters.campPattern && !normKey(c).includes(normKey(filters.campPattern))) return;
-    if (filters.fCamp && c !== filters.fCamp) return;
-    if (filters.fAdset && a !== filters.fAdset) return;
-    if (filters.fAd && ad !== filters.fAd) return;
+    const hasCampaign = !!String(c || '').trim();
+    const hasAdset = !!String(a || '').trim();
+    const hasAd = !!String(ad || '').trim();
+    // Não elimina linhas sem UTM por filtros de campanha.
+    if (filters.campPattern && hasCampaign && !normKey(c).includes(normKey(filters.campPattern))) return;
+    if (filters.fCamp && hasCampaign && c !== filters.fCamp) return;
+    if (filters.fAdset && hasAdset && a !== filters.fAdset) return;
+    if (filters.fAd && hasAd && ad !== filters.fAd) return;
     count++;
   });
   return count;
