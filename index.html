@@ -309,6 +309,24 @@ tbody td { padding:11px 12px; font-size:13px; color:var(--text); }
       </div>
       <button class="btn-ghost" type="button" onclick="autoFillConversionGidFromSheet()">Buscar GID de conversões</button>
       <div class="config-status" id="autoConvGidStatus"></div>
+      <button class="btn-ghost" type="button" onclick="detectSurveyColumns()">Detectar perguntas da aba de conversões</button>
+      <div class="config-status" id="surveyColumnsStatus"></div>
+      <div class="stage-config-wrap">
+        <div class="stage-config-title">Mapeamento de perguntas (seleção por coluna)</div>
+        <div class="config-hint" style="margin-bottom:10px;">Selecione qual coluna da planilha alimenta cada campo do dashboard.</div>
+        <div class="config-field"><label>Pergunta para Prioridade</label><select class="camp-select" id="surveyMapPrioridade"></select></div>
+        <div class="config-field"><label>Pergunta para Situação Financeira</label><select class="camp-select" id="surveyMapSituacao"></select></div>
+        <div class="config-field"><label>Pergunta para Urgência</label><select class="camp-select" id="surveyMapUrgencia"></select></div>
+        <div class="config-field"><label>Pergunta para Estoque</label><select class="camp-select" id="surveyMapEstoque"></select></div>
+        <div class="config-field"><label>Pergunta para Faturamento</label><select class="camp-select" id="surveyMapFaturamento"></select></div>
+        <div class="config-field"><label>Pergunta para Lojista / Tipo de Negócio</label><select class="camp-select" id="surveyMapLojista"></select></div>
+      </div>
+      <div class="stage-config-wrap">
+        <div class="stage-config-title">Regras de qualificação</div>
+        <div class="config-hint" style="margin-bottom:10px;">Defina as condições para um lead ser qualificado (contém / não contém). Todas as regras precisam ser verdadeiras.</div>
+        <div id="surveyQualificationRules"></div>
+        <button class="btn-stage-add" type="button" onclick="addSurveyQualificationRule()">+ Adicionar regra</button>
+      </div>
       <div class="config-field"><label>Prioridade (aliases, separados por vírgula)</label><input type="text" id="surveyPrioridadeAliases"></div>
       <div class="config-field"><label>Situação Financeira (aliases)</label><input type="text" id="surveySituacaoAliases"></div>
       <div class="config-field"><label>Urgência (aliases)</label><input type="text" id="surveyUrgenciaAliases"></div>
@@ -1030,9 +1048,57 @@ const DEFAULT_SURVEY_CONFIG = {
   urgenciaAliases: ['Urgência', 'Urgencia'],
   estoqueAliases: ['Estoque'],
   faturamentoAliases: ['Faturamento lojista', 'Faturamento'],
-  lojistaAliases: ['Lojista', 'Você é lojista', 'Voce e lojista', 'Tipo de Negócio', 'Tipo de Negocio']
+  lojistaAliases: ['Lojista', 'Você é lojista', 'Voce e lojista', 'Tipo de Negócio', 'Tipo de Negocio'],
+  fieldMap: {
+    prioridade: '',
+    situacao: '',
+    urgencia: '',
+    estoque: '',
+    faturamento: '',
+    lojista: ''
+  },
+  detectedColumns: [],
+  qualificationRules: [
+    { column: '', operator: 'contains', value: 'sim' },
+    { column: '', operator: 'not_contains', value: 'menos de r$24.000' }
+  ]
 };
 let SURVEY_CONFIG = JSON.parse(JSON.stringify(DEFAULT_SURVEY_CONFIG));
+
+function normalizeSurveyConfig(raw) {
+  const source = raw && typeof raw === 'object' ? raw : {};
+  const fieldMap = source.fieldMap && typeof source.fieldMap === 'object' ? source.fieldMap : {};
+  const qualificationRulesRaw = Array.isArray(source.qualificationRules) ? source.qualificationRules : [];
+  const qualificationRules = qualificationRulesRaw
+    .map((r) => ({
+      column: String(r?.column || '').trim(),
+      operator: r?.operator === 'not_contains' ? 'not_contains' : 'contains',
+      value: String(r?.value || '').trim()
+    }))
+    .filter((r) => r.column || r.value);
+  return {
+    prioridadeAliases: Array.isArray(source.prioridadeAliases) ? source.prioridadeAliases : DEFAULT_SURVEY_CONFIG.prioridadeAliases,
+    situacaoAliases: Array.isArray(source.situacaoAliases) ? source.situacaoAliases : DEFAULT_SURVEY_CONFIG.situacaoAliases,
+    urgenciaAliases: Array.isArray(source.urgenciaAliases) ? source.urgenciaAliases : DEFAULT_SURVEY_CONFIG.urgenciaAliases,
+    estoqueAliases: Array.isArray(source.estoqueAliases) ? source.estoqueAliases : DEFAULT_SURVEY_CONFIG.estoqueAliases,
+    faturamentoAliases: Array.isArray(source.faturamentoAliases) ? source.faturamentoAliases : DEFAULT_SURVEY_CONFIG.faturamentoAliases,
+    lojistaAliases: Array.isArray(source.lojistaAliases) ? source.lojistaAliases : DEFAULT_SURVEY_CONFIG.lojistaAliases,
+    fieldMap: {
+      prioridade: String(fieldMap.prioridade || ''),
+      situacao: String(fieldMap.situacao || ''),
+      urgencia: String(fieldMap.urgencia || ''),
+      estoque: String(fieldMap.estoque || ''),
+      faturamento: String(fieldMap.faturamento || ''),
+      lojista: String(fieldMap.lojista || '')
+    },
+    detectedColumns: Array.isArray(source.detectedColumns)
+      ? source.detectedColumns.map((c) => String(c || '').trim()).filter(Boolean)
+      : [],
+    qualificationRules: qualificationRules.length
+      ? qualificationRules
+      : JSON.parse(JSON.stringify(DEFAULT_SURVEY_CONFIG.qualificationRules))
+  };
+}
 
 function findStageSourceByAliases(aliases) {
   const wanted = aliases.map(a => normalizeName(a));
@@ -1110,14 +1176,7 @@ try {
   if (saved.publishedBase) PUBLISHED_BASE = saved.publishedBase;
   if (saved.brandName) BRAND_NAME = String(saved.brandName);
   if (saved.surveyConfig && typeof saved.surveyConfig === 'object') {
-    SURVEY_CONFIG = {
-      prioridadeAliases: Array.isArray(saved.surveyConfig.prioridadeAliases) ? saved.surveyConfig.prioridadeAliases : DEFAULT_SURVEY_CONFIG.prioridadeAliases,
-      situacaoAliases: Array.isArray(saved.surveyConfig.situacaoAliases) ? saved.surveyConfig.situacaoAliases : DEFAULT_SURVEY_CONFIG.situacaoAliases,
-      urgenciaAliases: Array.isArray(saved.surveyConfig.urgenciaAliases) ? saved.surveyConfig.urgenciaAliases : DEFAULT_SURVEY_CONFIG.urgenciaAliases,
-      estoqueAliases: Array.isArray(saved.surveyConfig.estoqueAliases) ? saved.surveyConfig.estoqueAliases : DEFAULT_SURVEY_CONFIG.estoqueAliases,
-      faturamentoAliases: Array.isArray(saved.surveyConfig.faturamentoAliases) ? saved.surveyConfig.faturamentoAliases : DEFAULT_SURVEY_CONFIG.faturamentoAliases,
-      lojistaAliases: Array.isArray(saved.surveyConfig.lojistaAliases) ? saved.surveyConfig.lojistaAliases : DEFAULT_SURVEY_CONFIG.lojistaAliases
-    };
+    SURVEY_CONFIG = normalizeSurveyConfig(saved.surveyConfig);
   }
   if (saved.gidEtapas) GID_ETAPAS = saved.gidEtapas;
   if (saved.gidConv)   GID_CONV   = saved.gidConv;
@@ -1492,7 +1551,7 @@ try {
       };
     }
     if (c[9]) BRAND_NAME = String(c[9]);
-    if (c[10] && typeof c[10] === 'object') SURVEY_CONFIG = { ...SURVEY_CONFIG, ...c[10] };
+    if (c[10] && typeof c[10] === 'object') SURVEY_CONFIG = normalizeSurveyConfig(c[10]);
     if (c[5]) activeFunnelId = String(c[5]);
     localStorage.setItem(getCfgKey(), JSON.stringify({
       sheetId: SHEET_ID,
@@ -1704,6 +1763,90 @@ function fillSurveyConfigInputs() {
   set('surveyEstoqueAliases', SURVEY_CONFIG.estoqueAliases);
   set('surveyFaturamentoAliases', SURVEY_CONFIG.faturamentoAliases);
   set('surveyLojistaAliases', SURVEY_CONFIG.lojistaAliases);
+  fillSurveyMappingSelects();
+  renderSurveyQualificationRules();
+}
+
+function getSurveyColumnOptions() {
+  const colsDetected = Array.isArray(SURVEY_CONFIG.detectedColumns) ? SURVEY_CONFIG.detectedColumns : [];
+  const colsLoaded = getColumnsFromRows(RAW_CONV_VIEW || []);
+  const cols = [...new Set([...colsDetected, ...colsLoaded])].filter(Boolean).sort((a, b) => a.localeCompare(b));
+  return cols;
+}
+
+function fillSelectOptions(selectId, options, current, placeholder) {
+  const sel = document.getElementById(selectId);
+  if (!sel) return;
+  sel.innerHTML = `<option value="">${placeholder}</option>`;
+  options.forEach((optValue) => {
+    const opt = document.createElement('option');
+    opt.value = optValue;
+    opt.textContent = optValue;
+    sel.appendChild(opt);
+  });
+  if (current && !options.includes(current)) {
+    const extra = document.createElement('option');
+    extra.value = current;
+    extra.textContent = `${current} (salva)`;
+    sel.appendChild(extra);
+  }
+  sel.value = current || '';
+}
+
+function fillSurveyMappingSelects() {
+  const cols = getSurveyColumnOptions();
+  fillSelectOptions('surveyMapPrioridade', cols, SURVEY_CONFIG.fieldMap?.prioridade || '', 'Selecionar coluna');
+  fillSelectOptions('surveyMapSituacao', cols, SURVEY_CONFIG.fieldMap?.situacao || '', 'Selecionar coluna');
+  fillSelectOptions('surveyMapUrgencia', cols, SURVEY_CONFIG.fieldMap?.urgencia || '', 'Selecionar coluna');
+  fillSelectOptions('surveyMapEstoque', cols, SURVEY_CONFIG.fieldMap?.estoque || '', 'Selecionar coluna');
+  fillSelectOptions('surveyMapFaturamento', cols, SURVEY_CONFIG.fieldMap?.faturamento || '', 'Selecionar coluna');
+  fillSelectOptions('surveyMapLojista', cols, SURVEY_CONFIG.fieldMap?.lojista || '', 'Selecionar coluna');
+}
+
+function renderSurveyQualificationRules() {
+  const host = document.getElementById('surveyQualificationRules');
+  if (!host) return;
+  const cols = getSurveyColumnOptions();
+  const rules = Array.isArray(SURVEY_CONFIG.qualificationRules) && SURVEY_CONFIG.qualificationRules.length
+    ? SURVEY_CONFIG.qualificationRules
+    : JSON.parse(JSON.stringify(DEFAULT_SURVEY_CONFIG.qualificationRules));
+  SURVEY_CONFIG.qualificationRules = rules;
+  host.innerHTML = rules.map((r, idx) => {
+    const colOptions = ['<option value="">Selecionar coluna</option>']
+      .concat(cols.map((c) => `<option value="${c.replace(/"/g, '&quot;')}" ${c === r.column ? 'selected' : ''}>${c}</option>`))
+      .join('');
+    return `
+      <div class="stage-row">
+        <select class="camp-select" onchange="onSurveyQualificationRuleChange(${idx}, 'column', this.value)">${colOptions}</select>
+        <select class="camp-select" onchange="onSurveyQualificationRuleChange(${idx}, 'operator', this.value)">
+          <option value="contains" ${r.operator === 'contains' ? 'selected' : ''}>Deve conter</option>
+          <option value="not_contains" ${r.operator === 'not_contains' ? 'selected' : ''}>Não deve conter</option>
+        </select>
+        <input type="text" value="${String(r.value || '').replace(/"/g, '&quot;')}" placeholder="Texto da resposta" onchange="onSurveyQualificationRuleChange(${idx}, 'value', this.value)">
+        <button class="btn-stage-remove" type="button" onclick="removeSurveyQualificationRule(${idx})">Excluir</button>
+      </div>
+    `;
+  }).join('');
+}
+
+function addSurveyQualificationRule() {
+  if (!Array.isArray(SURVEY_CONFIG.qualificationRules)) SURVEY_CONFIG.qualificationRules = [];
+  SURVEY_CONFIG.qualificationRules.push({ column: '', operator: 'contains', value: '' });
+  renderSurveyQualificationRules();
+}
+
+function removeSurveyQualificationRule(index) {
+  if (!Array.isArray(SURVEY_CONFIG.qualificationRules)) return;
+  SURVEY_CONFIG.qualificationRules.splice(index, 1);
+  if (!SURVEY_CONFIG.qualificationRules.length) {
+    SURVEY_CONFIG.qualificationRules = [{ column: '', operator: 'contains', value: '' }];
+  }
+  renderSurveyQualificationRules();
+}
+
+function onSurveyQualificationRuleChange(index, field, value) {
+  if (!Array.isArray(SURVEY_CONFIG.qualificationRules) || !SURVEY_CONFIG.qualificationRules[index]) return;
+  SURVEY_CONFIG.qualificationRules[index][field] = String(value || '').trim();
 }
 
 function parseAliasInput(v, fallback) {
@@ -1715,6 +1858,21 @@ function parseAliasInput(v, fallback) {
 }
 
 function saveSurveyConfig() {
+  const fieldMap = {
+    prioridade: String(document.getElementById('surveyMapPrioridade')?.value || '').trim(),
+    situacao: String(document.getElementById('surveyMapSituacao')?.value || '').trim(),
+    urgencia: String(document.getElementById('surveyMapUrgencia')?.value || '').trim(),
+    estoque: String(document.getElementById('surveyMapEstoque')?.value || '').trim(),
+    faturamento: String(document.getElementById('surveyMapFaturamento')?.value || '').trim(),
+    lojista: String(document.getElementById('surveyMapLojista')?.value || '').trim()
+  };
+  const qualificationRules = (SURVEY_CONFIG.qualificationRules || [])
+    .map((r) => ({
+      column: String(r?.column || '').trim(),
+      operator: r?.operator === 'not_contains' ? 'not_contains' : 'contains',
+      value: String(r?.value || '').trim()
+    }))
+    .filter((r) => r.column && r.value);
   SURVEY_CONFIG = {
     prioridadeAliases: parseAliasInput(document.getElementById('surveyPrioridadeAliases')?.value, DEFAULT_SURVEY_CONFIG.prioridadeAliases),
     situacaoAliases: parseAliasInput(document.getElementById('surveySituacaoAliases')?.value, DEFAULT_SURVEY_CONFIG.situacaoAliases),
@@ -1722,6 +1880,9 @@ function saveSurveyConfig() {
     estoqueAliases: parseAliasInput(document.getElementById('surveyEstoqueAliases')?.value, DEFAULT_SURVEY_CONFIG.estoqueAliases),
     faturamentoAliases: parseAliasInput(document.getElementById('surveyFaturamentoAliases')?.value, DEFAULT_SURVEY_CONFIG.faturamentoAliases),
     lojistaAliases: parseAliasInput(document.getElementById('surveyLojistaAliases')?.value, DEFAULT_SURVEY_CONFIG.lojistaAliases),
+    fieldMap,
+    detectedColumns: getSurveyColumnOptions(),
+    qualificationRules: qualificationRules.length ? qualificationRules : JSON.parse(JSON.stringify(DEFAULT_SURVEY_CONFIG.qualificationRules))
   };
   persistConfigState();
   renderConversoes(RAW_CONV_VIEW);
@@ -1733,6 +1894,25 @@ function getSurveyAliases(key) {
   const aliases = SURVEY_CONFIG?.[key];
   if (Array.isArray(aliases) && aliases.length) return aliases;
   return DEFAULT_SURVEY_CONFIG[key] || [];
+}
+
+function getFieldByMappedColumn(row, column) {
+  const wanted = String(column || '').trim();
+  if (!wanted) return '';
+  if (Object.prototype.hasOwnProperty.call(row || {}, wanted)) {
+    return String(row[wanted] || '').trim();
+  }
+  const wantedNorm = normalizeName(wanted).replace(/\s+/g, '');
+  const keys = Object.keys(row || {});
+  const hit = keys.find((k) => normalizeName(k).replace(/\s+/g, '') === wantedNorm);
+  return hit ? String(row[hit] || '').trim() : '';
+}
+
+function getSurveyValue(row, mapKey, aliasKey, getFieldByAliasesFn) {
+  const mapped = String(SURVEY_CONFIG?.fieldMap?.[mapKey] || '').trim();
+  const byMap = getFieldByMappedColumn(row, mapped);
+  if (byMap) return byMap;
+  return getFieldByAliasesFn(row, getSurveyAliases(aliasKey));
 }
 
 function syncMetricRulesFromConfigInputs() {
@@ -2199,6 +2379,41 @@ async function autoFillConversionGidFromSheet() {
   }
 }
 
+async function detectSurveyColumns() {
+  const status = document.getElementById('surveyColumnsStatus');
+  if (status) status.textContent = 'Lendo colunas da aba de conversões...';
+  try {
+    const gid = String(document.getElementById('gidConversoes')?.value || '').trim();
+    if (!gid) throw new Error('Informe ou detecte primeiro o GID de conversões.');
+    let rows = RAW.conv;
+    if (!Array.isArray(rows) || !rows.length) {
+      rows = await fetchCSV(gid);
+    }
+    const cols = getColumnsFromRows(rows).sort((a, b) => a.localeCompare(b));
+    if (!cols.length) throw new Error('Nenhuma coluna encontrada nesta aba.');
+    SURVEY_CONFIG.detectedColumns = cols;
+    const autoSet = (mapKey, keywords) => {
+      const current = String(SURVEY_CONFIG.fieldMap?.[mapKey] || '').trim();
+      if (current) return;
+      const best = findBestColumnByKeywords(cols, keywords);
+      if (!best) return;
+      SURVEY_CONFIG.fieldMap[mapKey] = best;
+    };
+    autoSet('prioridade', ['prioridade']);
+    autoSet('situacao', ['situação financeira', 'situacao financeira', 'financeira']);
+    autoSet('urgencia', ['urgência', 'urgencia']);
+    autoSet('estoque', ['estoque']);
+    autoSet('faturamento', ['faturamento lojista', 'faturamento']);
+    autoSet('lojista', ['você é lojista', 'voce e lojista', 'lojista', 'tipo de negócio', 'tipo de negocio']);
+    fillSurveyMappingSelects();
+    renderSurveyQualificationRules();
+    persistConfigState();
+    if (status) status.textContent = `Colunas detectadas: ${cols.length}. Selecione as perguntas e salve.`;
+  } catch (e) {
+    if (status) status.textContent = `Falha ao detectar colunas: ${e.message}`;
+  }
+}
+
 // ── CSV FETCH ──────────────────────────
 async function fetchCSV(gid, useExport=false) {
   if (!gid && !useExport) throw new Error('GID da aba não informado.');
@@ -2620,8 +2835,20 @@ function renderConversoes(rows) {
       || (txt.includes('menosde') && txt.includes('24000'));
   }
   function isQualifiedLead(row) {
-    const lojista = row.lojista_resp || getFieldByAliases(row, getSurveyAliases('lojistaAliases'));
-    const faturamento = row.faturamento_lojista || getFieldByAliases(row, getSurveyAliases('faturamentoAliases'));
+    const rules = Array.isArray(SURVEY_CONFIG.qualificationRules) ? SURVEY_CONFIG.qualificationRules : [];
+    const validRules = rules.filter((r) => String(r?.column || '').trim() && String(r?.value || '').trim());
+    if (validRules.length) {
+      return validRules.every((rule) => {
+        const raw = getFieldByMappedColumn(row, rule.column);
+        const rowVal = normalizeName(raw);
+        const target = normalizeName(rule.value);
+        if (!target) return true;
+        if (rule.operator === 'not_contains') return !rowVal.includes(target);
+        return rowVal.includes(target);
+      });
+    }
+    const lojista = row.lojista_resp || getSurveyValue(row, 'lojista', 'lojistaAliases', getFieldByAliases);
+    const faturamento = row.faturamento_lojista || getSurveyValue(row, 'faturamento', 'faturamentoAliases', getFieldByAliases);
     return isLojistaAnswer(lojista) && !isExcludedRevenueAnswer(faturamento);
   }
 
@@ -2644,12 +2871,12 @@ function renderConversoes(rows) {
       campanha_resp: getLeadUtmCampaign(src) || String(r.utm_campaign || '').trim(),
       conjunto_resp: getLeadUtmContent(src) || String(r.utm_content || '').trim(),
       anuncio_resp: getLeadUtmTerm(src) || String(r.utm_term || '').trim(),
-      lojista_resp: getFieldByAliases(src, getSurveyAliases('lojistaAliases')),
-      prioridade: getFieldByAliases(src, getSurveyAliases('prioridadeAliases')),
-      situacao_financeira: getFieldByAliases(src, getSurveyAliases('situacaoAliases')),
-      urgencia: getFieldByAliases(src, getSurveyAliases('urgenciaAliases')),
-      estoque: getFieldByAliases(src, getSurveyAliases('estoqueAliases')),
-      faturamento_lojista: getFieldByAliases(src, getSurveyAliases('faturamentoAliases'))
+      lojista_resp: getSurveyValue(src, 'lojista', 'lojistaAliases', getFieldByAliases),
+      prioridade: getSurveyValue(src, 'prioridade', 'prioridadeAliases', getFieldByAliases),
+      situacao_financeira: getSurveyValue(src, 'situacao', 'situacaoAliases', getFieldByAliases),
+      urgencia: getSurveyValue(src, 'urgencia', 'urgenciaAliases', getFieldByAliases),
+      estoque: getSurveyValue(src, 'estoque', 'estoqueAliases', getFieldByAliases),
+      faturamento_lojista: getSurveyValue(src, 'faturamento', 'faturamentoAliases', getFieldByAliases)
     };
   });
 
