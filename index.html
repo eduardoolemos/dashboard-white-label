@@ -3105,6 +3105,7 @@ function renderConversoes(rows) {
   const prioridadeCount = mapAnswers(chartMappings[0]);
   const perfisLabels = Object.keys(prioridadeCount);
   const perfisData = perfisLabels.map(k => prioridadeCount[k]);
+  const perfisTotal = perfisData.reduce((a, b) => a + b, 0);
   if (chartPerfis) chartPerfis.destroy();
   chartPerfis = new Chart(document.getElementById('chartPerfis'), {
     type: 'bar',
@@ -3114,7 +3115,18 @@ function renderConversoes(rows) {
     },
     options: {
       responsive: true, maintainAspectRatio: false,
-      plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => ` ${ctx.raw} leads` }}},
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label: (ctx) => {
+              const val = Number(ctx.raw || 0);
+              const pctVal = perfisTotal ? Math.round((val / perfisTotal) * 100) : 0;
+              return ` ${val} (${pctVal}%)`;
+            }
+          }
+        }
+      },
       scales: {
         x: { grid:{ color:'#1a2830' }, ticks:{ color:'#567080', font:{family:'DM Mono',size:10} }},
         y: { grid:{ color:'#1a2830' }, ticks:{ color:'#567080', font:{family:'DM Mono',size:10} }, beginAtZero:true }
@@ -3123,6 +3135,7 @@ function renderConversoes(rows) {
   });
 
   const assMap = mapAnswers(chartMappings[1]);
+  const assTotal = Object.values(assMap).reduce((a, b) => a + b, 0);
   if (chartAssign) chartAssign.destroy();
   chartAssign = new Chart(document.getElementById('chartAssinaturas'), {
     type: 'doughnut',
@@ -3133,7 +3146,34 @@ function renderConversoes(rows) {
     options: {
       responsive: true, maintainAspectRatio: false,
       plugins: {
-        legend: { position:'bottom', labels:{ color:'#567080', font:{family:'DM Mono',size:10}, padding:12, boxWidth:10 }},
+        legend: {
+          position:'bottom',
+          labels:{
+            color:'#567080',
+            font:{family:'DM Mono',size:10},
+            padding:12,
+            boxWidth:10,
+            generateLabels: (chart) => {
+              const labels = chart.data.labels || [];
+              const data = chart.data.datasets?.[0]?.data || [];
+              return labels.map((label, i) => {
+                const val = Number(data[i] || 0);
+                const pctVal = assTotal ? Math.round((val / assTotal) * 100) : 0;
+                const base = Chart.defaults.plugins.legend.labels.generateLabels(chart)[i];
+                return { ...base, text: `${label} (${pctVal}%)` };
+              });
+            }
+          }
+        },
+        tooltip: {
+          callbacks: {
+            label: (ctx) => {
+              const val = Number(ctx.raw || 0);
+              const pctVal = assTotal ? Math.round((val / assTotal) * 100) : 0;
+              return ` ${ctx.label}: ${val} (${pctVal}%)`;
+            }
+          }
+        }
       }
     }
   });
@@ -3142,23 +3182,26 @@ function renderConversoes(rows) {
   const maxCtrl = Math.max(...Object.values(ctrlMap),1);
   const ctrlColors = { 'Alta':'var(--red)', 'Média':'var(--gold)', 'Baixa':'var(--teal)', '?':'var(--text2)' };
   const ctrlEntries = Object.entries(ctrlMap).sort((a,b)=>b[1]-a[1]);
+  const ctrlTotal = ctrlEntries.reduce((acc, [, n]) => acc + n, 0);
   document.getElementById('controleGastos').innerHTML = ctrlEntries.length ? ctrlEntries.map(([c,n]) => {
     const cor = Object.entries(ctrlColors).find(([k]) => normalizeName(c).includes(normalizeName(k)))?.[1] || 'var(--teal)';
+    const pctVal = ctrlTotal ? Math.round((n / ctrlTotal) * 100) : 0;
     return `<div class="prog-row">
       <div class="prog-label">${c}</div>
       <div class="prog-bar-wrap"><div class="prog-bar" style="width:${((n/maxCtrl)*100).toFixed(0)}%;background:${cor};"></div></div>
-      <div class="prog-val">${n}</div>
+      <div class="prog-val">${n} (${pctVal}%)</div>
     </div>`;
   }).join('') : '<div style="color:var(--text2);font-size:12px;">Sem respostas para esta pergunta.</div>';
 
   const estoqueMap = mapAnswers(chartMappings[3]);
   const sortedConv = Object.entries(estoqueMap).sort((a,b)=>b[1]-a[1]).slice(0,6);
   const maxCC = sortedConv[0]?.[1]||1;
+  const convTotal = sortedConv.reduce((acc, [, n]) => acc + n, 0);
   document.getElementById('campanhasConv').innerHTML = sortedConv.length ? sortedConv.map(([c,n]) => `
     <div class="prog-row">
       <div class="prog-label">${c}</div>
       <div class="prog-bar-wrap"><div class="prog-bar" style="width:${((n/maxCC)*100).toFixed(0)}%;background:var(--teal);"></div></div>
-      <div class="prog-val">${n}</div>
+      <div class="prog-val">${n} (${convTotal ? Math.round((n / convTotal) * 100) : 0}%)</div>
     </div>`).join('') : '<div style="color:var(--text2);font-size:12px;">Sem respostas para esta pergunta.</div>';
 
   const sortDateKey = dateCol || 'data_hora';
