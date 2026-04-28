@@ -1065,14 +1065,7 @@ const DEFAULT_SURVEY_CONFIG = {
     faturamento: '',
     lojista: ''
   },
-  questionMappings: [
-    { targetKey: 'prioridade', questionText: '', column: '' },
-    { targetKey: 'situacao', questionText: '', column: '' },
-    { targetKey: 'urgencia', questionText: '', column: '' },
-    { targetKey: 'estoque', questionText: '', column: '' },
-    { targetKey: 'faturamento', questionText: '', column: '' },
-    { targetKey: 'lojista', questionText: '', column: '' }
-  ],
+  questionMappings: [],
   detectedColumns: [],
   qualificationRules: [
     { column: '', operator: 'contains', value: 'sim' },
@@ -1117,14 +1110,7 @@ function normalizeSurveyConfig(raw) {
       faturamento: String(fieldQuestions.faturamento || ''),
       lojista: String(fieldQuestions.lojista || '')
     },
-    questionMappings: (questionMappingsRaw.length
-      ? questionMappingsRaw
-      : SURVEY_TARGET_FIELDS.map((f) => ({
-          targetKey: f.key,
-          questionText: String(fieldQuestions[f.key] || ''),
-          column: String(fieldMap[f.key] || '')
-        }))
-    ).map((m) => ({
+    questionMappings: questionMappingsRaw.map((m) => ({
       targetKey: SURVEY_TARGET_FIELDS.some((f) => f.key === String(m?.targetKey || '')) ? String(m.targetKey) : '',
       questionText: String(m?.questionText || '').trim(),
       column: String(m?.column || '').trim()
@@ -1829,6 +1815,10 @@ function renderSurveyQuestionMappings() {
     .concat(SURVEY_TARGET_FIELDS.map((f) => `<option value="${f.key}">${f.label}</option>`))
     .join('');
   const rows = Array.isArray(SURVEY_CONFIG.questionMappings) ? SURVEY_CONFIG.questionMappings : [];
+  if (!rows.length) {
+    host.innerHTML = '<div class="config-hint" style="margin:6px 0 10px;">Nenhuma pergunta adicionada ainda. Clique em "+ Adicionar pergunta" para montar o mapeamento desse cliente.</div>';
+    return;
+  }
   host.innerHTML = rows.map((m, idx) => {
     const colOptions = ['<option value="">Selecionar coluna</option>']
       .concat(cols.map((c) => `<option value="${c.replace(/"/g, '&quot;')}" ${c === m.column ? 'selected' : ''}>${c}</option>`))
