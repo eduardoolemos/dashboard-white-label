@@ -929,11 +929,10 @@ const DEFAULT_STAGE_CONFIGS = [
   { name: 'Call Feita', gid: '' }
 ];
 const STANDARD_STAGE_CONFIGS = [
+  { name: 'Leads Forms nativo', gid: '' },
   { name: 'Leads', gid: '' },
   { name: 'Reunião Agendada', gid: '' },
-  { name: 'Call Confirmada', gid: '' },
-  { name: 'No-Show', gid: '' },
-  { name: 'Call Feita', gid: '' }
+  { name: 'Proposta enviada', gid: '' }
 ];
 let STAGE_CONFIGS = DEFAULT_STAGE_CONFIGS.map(s => ({ ...s }));
 let FUNNELS = [];
@@ -1004,14 +1003,14 @@ function buildStandardMetricRules() {
   return {
     lead: {
       ...DEFAULT_METRIC_RULES.lead,
-      sourceKey: 'conv',
+      sourceKey: findStageSourceByAliases(['leads forms nativo', 'leads']),
       mode: 'count_filtered',
       filterColumn: 'Contagem',
       filterValue: 'Lead',
     },
     mql: {
       ...DEFAULT_METRIC_RULES.mql,
-      sourceKey: 'conv',
+      sourceKey: findStageSourceByAliases(['leads forms nativo', 'leads']),
       mode: 'count_filtered',
       filterColumn: 'Qualificação',
       filterValue: 'Qualificado',
@@ -1025,10 +1024,11 @@ function buildStandardMetricRules() {
     },
     confirmada: {
       ...DEFAULT_METRIC_RULES.confirmada,
-      sourceKey: findStageSourceByAliases(['call confirmada', 'reuniao confirmada', 'reunião confirmada']),
+      sourceKey: findStageSourceByAliases(['proposta enviada', 'call confirmada', 'reuniao confirmada', 'reunião confirmada']),
       mode: 'count_all',
       filterColumn: '',
       filterValue: '',
+      available: true,
     },
     noShow: {
       ...DEFAULT_METRIC_RULES.noShow,
@@ -1036,22 +1036,26 @@ function buildStandardMetricRules() {
       mode: 'count_all',
       filterColumn: '',
       filterValue: '',
+      available: false,
     },
     callFeita: {
       ...DEFAULT_METRIC_RULES.callFeita,
-      sourceKey: findStageSourceByAliases(['call feita']),
+      sourceKey: findStageSourceByAliases(['call feita', 'proposta enviada']),
       mode: 'count_all',
       filterColumn: '',
       filterValue: '',
+      available: false,
     }
   };
 }
 
 function refreshMetricStageSources() {
+  METRIC_RULES.lead.sourceKey = findStageSourceByAliases(['leads forms nativo', 'leads']);
+  METRIC_RULES.mql.sourceKey = findStageSourceByAliases(['leads forms nativo', 'leads']);
   METRIC_RULES.agendada.sourceKey = findStageSourceByAliases(['reuniao agendada', 'reunião agendada', 'contato de confirmacao']);
-  METRIC_RULES.confirmada.sourceKey = findStageSourceByAliases(['call confirmada', 'reuniao confirmada', 'reunião confirmada']);
+  METRIC_RULES.confirmada.sourceKey = findStageSourceByAliases(['proposta enviada', 'call confirmada', 'reuniao confirmada', 'reunião confirmada']);
   METRIC_RULES.noShow.sourceKey = findStageSourceByAliases(['no-show', 'no show']);
-  METRIC_RULES.callFeita.sourceKey = findStageSourceByAliases(['call feita']);
+  METRIC_RULES.callFeita.sourceKey = findStageSourceByAliases(['call feita', 'proposta enviada']);
 }
 CLIENT_KEY = getTenantFromUrl();
 
@@ -2010,7 +2014,7 @@ async function autoFillGidsFromSheet() {
 
     const mapMain = [
       { id: 'gidEtapas', aliases: ['track etapas', 'tracking etapas', 'etapas'] },
-      { id: 'gidConversoes', aliases: ['conversoes', 'conversões'] },
+      { id: 'gidConversoes', aliases: ['conversoes', 'conversões', 'leads forms nativo', 'leads'] },
       { id: 'gidAds', aliases: ['extracao gerenciador', 'extração gerenciador', 'meta ads', 'gerenciador'] }
     ];
 
