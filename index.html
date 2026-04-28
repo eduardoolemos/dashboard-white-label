@@ -2931,7 +2931,7 @@ function isMqlRow(r) {
   return rowMatchesMetricRule(r, METRIC_RULES.mql);
 }
 
-function getTrafficLeadStats() {
+function getTrafficLeadStats(filters = {}) {
   const leadRows = getRowsForMetricKey('lead');
   const mqlRows = getRowsForMetricKey('mql');
   const leadDateCol = getTrafficLeadDateCol(leadRows);
@@ -2943,6 +2943,14 @@ function getTrafficLeadStats() {
       const d = parseDate(r[leadDateCol]);
       if (d && !inPeriod(d)) return;
     }
+    const c = getLeadUtmCampaign(r);
+    const a = getLeadUtmContent(r);
+    const ad = getLeadUtmTerm(r);
+    const hasAnyUtm = hasAttributionValue(c) || hasAttributionValue(a) || hasAttributionValue(ad);
+    if (filters.campPattern && hasAnyUtm && !matchesAnyUtmPattern(c, a, ad, filters.campPattern)) return;
+    if (filters.fCamp && hasAnyUtm && !matchesAnyUtmExact(c, a, ad, filters.fCamp)) return;
+    if (filters.fAdset && hasAnyUtm && !matchesAnyUtmExact(c, a, ad, filters.fAdset)) return;
+    if (filters.fAd && hasAnyUtm && !matchesAnyUtmExact(c, a, ad, filters.fAd)) return;
     leads++;
   });
   mqlRows.forEach(r => {
@@ -2951,6 +2959,14 @@ function getTrafficLeadStats() {
       const d = parseDate(r[mqlDateCol]);
       if (d && !inPeriod(d)) return;
     }
+    const c = getLeadUtmCampaign(r);
+    const a = getLeadUtmContent(r);
+    const ad = getLeadUtmTerm(r);
+    const hasAnyUtm = hasAttributionValue(c) || hasAttributionValue(a) || hasAttributionValue(ad);
+    if (filters.campPattern && hasAnyUtm && !matchesAnyUtmPattern(c, a, ad, filters.campPattern)) return;
+    if (filters.fCamp && hasAnyUtm && !matchesAnyUtmExact(c, a, ad, filters.fCamp)) return;
+    if (filters.fAdset && hasAnyUtm && !matchesAnyUtmExact(c, a, ad, filters.fAdset)) return;
+    if (filters.fAd && hasAnyUtm && !matchesAnyUtmExact(c, a, ad, filters.fAd)) return;
     mql++;
   });
   return { leads, mql };
@@ -3665,7 +3681,7 @@ function renderTrafego() {
   const cpm = imp    > 0 ? spend  / imp * 1000 : 0;
   const cpc = clicks > 0 ? spend  / clicks     : 0;
 
-  const { leads, mql } = getTrafficLeadStats();
+  const { leads, mql } = getTrafficLeadStats({ fCamp, fAdset, fAd, campPattern });
 
   // CPL = verba gasta no período ÷ leads convertidos no período
   const cpl      = leads > 0 && spend > 0 ? spend / leads : 0;
