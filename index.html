@@ -364,6 +364,7 @@ tbody td { padding:11px 12px; font-size:13px; color:var(--text); }
         <div class="stage-config-list" id="stageConfigList"></div>
         <button type="button" class="btn-stage-add" onclick="addStageConfig()">+ Adicionar etapa</button>
       </div>
+      <button type="button" class="btn-ghost" onclick="applySpreadsheetStandard()">Aplicar padrão da planilha</button>
       <button type="button" class="btn-ghost" id="btnAutoGid" onclick="autoFillGidsFromSheet()">Buscar GIDs automático</button>
       <div class="config-status" id="autoGidStatus"></div>
       <button type="button" class="btn-ghost" id="btnShortLink" onclick="generateShortShareLink()">Gerar link curto</button>
@@ -927,6 +928,13 @@ const DEFAULT_STAGE_CONFIGS = [
   { name: 'No-Show', gid: '' },
   { name: 'Call Feita', gid: '' }
 ];
+const STANDARD_STAGE_CONFIGS = [
+  { name: 'Leads', gid: '' },
+  { name: 'Reunião Agendada', gid: '' },
+  { name: 'Call Confirmada', gid: '' },
+  { name: 'No-Show', gid: '' },
+  { name: 'Call Feita', gid: '' }
+];
 let STAGE_CONFIGS = DEFAULT_STAGE_CONFIGS.map(s => ({ ...s }));
 let FUNNELS = [];
 let activeFunnelId = 'default';
@@ -981,6 +989,70 @@ const DEFAULT_METRIC_RULES = {
   }
 };
 let METRIC_RULES = JSON.parse(JSON.stringify(DEFAULT_METRIC_RULES));
+
+function findStageSourceByAliases(aliases) {
+  const wanted = aliases.map(a => normalizeName(a));
+  const hit = STAGE_CONFIGS.find((s) => {
+    const name = normalizeName(s.name || '');
+    return wanted.some((w) => name.includes(w) || w.includes(name));
+  });
+  const gid = String(hit?.gid || '').trim();
+  return gid ? `stage:${gid}` : 'auto';
+}
+
+function buildStandardMetricRules() {
+  return {
+    lead: {
+      ...DEFAULT_METRIC_RULES.lead,
+      sourceKey: 'conv',
+      mode: 'count_filtered',
+      filterColumn: 'Contagem',
+      filterValue: 'Lead',
+    },
+    mql: {
+      ...DEFAULT_METRIC_RULES.mql,
+      sourceKey: 'conv',
+      mode: 'count_filtered',
+      filterColumn: 'Qualificação',
+      filterValue: 'Qualificado',
+    },
+    agendada: {
+      ...DEFAULT_METRIC_RULES.agendada,
+      sourceKey: findStageSourceByAliases(['reuniao agendada', 'reunião agendada', 'contato de confirmacao']),
+      mode: 'count_all',
+      filterColumn: '',
+      filterValue: '',
+    },
+    confirmada: {
+      ...DEFAULT_METRIC_RULES.confirmada,
+      sourceKey: findStageSourceByAliases(['call confirmada', 'reuniao confirmada', 'reunião confirmada']),
+      mode: 'count_all',
+      filterColumn: '',
+      filterValue: '',
+    },
+    noShow: {
+      ...DEFAULT_METRIC_RULES.noShow,
+      sourceKey: findStageSourceByAliases(['no-show', 'no show']),
+      mode: 'count_all',
+      filterColumn: '',
+      filterValue: '',
+    },
+    callFeita: {
+      ...DEFAULT_METRIC_RULES.callFeita,
+      sourceKey: findStageSourceByAliases(['call feita']),
+      mode: 'count_all',
+      filterColumn: '',
+      filterValue: '',
+    }
+  };
+}
+
+function refreshMetricStageSources() {
+  METRIC_RULES.agendada.sourceKey = findStageSourceByAliases(['reuniao agendada', 'reunião agendada', 'contato de confirmacao']);
+  METRIC_RULES.confirmada.sourceKey = findStageSourceByAliases(['call confirmada', 'reuniao confirmada', 'reunião confirmada']);
+  METRIC_RULES.noShow.sourceKey = findStageSourceByAliases(['no-show', 'no show']);
+  METRIC_RULES.callFeita.sourceKey = findStageSourceByAliases(['call feita']);
+}
 CLIENT_KEY = getTenantFromUrl();
 
 try {
@@ -1733,6 +1805,22 @@ function onMetricRulesOverlayClick(e) {
   if (e?.target === modal) closeMetricRulesModal();
 }
 
+function applySpreadsheetStandard() {
+  STAGE_CONFIGS = STANDARD_STAGE_CONFIGS.map(s => ({ ...s }));
+  renderStageConfigs();
+  METRIC_RULES = buildStandardMetricRules();
+  refreshMetricStageSources();
+  fillConfigInputsFromGlobals();
+  syncGlobalsFromConfigInputs();
+  syncGlobalsToActiveFunnel();
+  persistConfigState();
+  const status = document.getElementById('autoGidStatus');
+  if (status) {
+    status.textContent =
+      'Padrão aplicado: etapas e regras base carregadas. Agora clique em "Buscar GIDs automático".';
+  }
+}
+
 function onDefaultCampaignPatternChange(value) {
   campaignContains = String(value || '').trim();
   const trafficInp = document.getElementById('campContains');
@@ -1948,6 +2036,7 @@ async function autoFillGidsFromSheet() {
     });
     renderStageConfigs();
 
+    refreshMetricStageSources();
     syncGlobalsFromConfigInputs();
     syncGlobalsToActiveFunnel();
     persistConfigState();
@@ -3876,6 +3965,7 @@ function hasMissingMainGids() {
 async function saveConfigAndLoad() {
   applyTenantFromInput(true);
   syncMetricRulesFromConfigInputs();
+  refreshMetricStageSources();
   const parsedSheet = parseSheetLink(document.getElementById('sheetLink').value);
   if (parsedSheet?.publishedBase) PUBLISHED_BASE = parsedSheet.publishedBase;
   if (parsedSheet?.sheetId) {
