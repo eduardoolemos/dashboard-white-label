@@ -351,6 +351,11 @@ tbody td { padding:11px 12px; font-size:13px; color:var(--text); }
       </div>
 
       <div class="config-field">
+        <label>Link da planilha de métricas (Config)</label>
+        <input type="text" id="sheetLinkConfig" placeholder="Cole aqui a URL da planilha usada para etapas/ads/métricas">
+        <div class="config-hint">Pode ser diferente da planilha de pesquisa/conversões.</div>
+      </div>
+      <div class="config-field">
         <label>Cliente (slug white-label)</label>
         <input type="text" id="tenantKey" placeholder="Ex: evolving, cliente-x">
         <div class="config-hint">Isola a configuração por cliente usando <code>?tenant=slug</code> na URL.</div>
@@ -899,6 +904,9 @@ tbody td { padding:11px 12px; font-size:13px; color:var(--text); }
 let SHEET_ID = '';
 let PUBLISHED_BASE = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vQOja4lKbMPn_FLspiZtYU-rYU0NTpRu2yvoCUmJe8SzbMTiJC5dKlDmXvP0LnCbReQlrW5jMyUJVFY/pub?output=csv';
 let EXPORT_BASE    = SHEET_ID ? `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv` : '';
+let METRICS_SHEET_ID = '';
+let METRICS_PUBLISHED_BASE = PUBLISHED_BASE;
+let METRICS_EXPORT_BASE = METRICS_SHEET_ID ? `https://docs.google.com/spreadsheets/d/${METRICS_SHEET_ID}/export?format=csv` : '';
 
 const CFG_KEY = 'chippu_dash_cfg_v3';
 const TRAFFIC_KEY = 'chippu_dash_traffic_v1';
@@ -1211,6 +1219,8 @@ try {
   const saved = JSON.parse(localStorage.getItem(getCfgKey()) || '{}');
   if (saved.sheetId) SHEET_ID = saved.sheetId;
   if (saved.publishedBase) PUBLISHED_BASE = saved.publishedBase;
+  if (saved.metricsSheetId) METRICS_SHEET_ID = saved.metricsSheetId;
+  if (saved.metricsPublishedBase) METRICS_PUBLISHED_BASE = saved.metricsPublishedBase;
   if (saved.brandName) BRAND_NAME = String(saved.brandName);
   if (saved.surveyConfig && typeof saved.surveyConfig === 'object') {
     SURVEY_CONFIG = normalizeSurveyConfig(saved.surveyConfig);
@@ -1271,6 +1281,9 @@ try {
   }
 } catch {}
 EXPORT_BASE = SHEET_ID ? `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv` : '';
+if (!METRICS_SHEET_ID) METRICS_SHEET_ID = SHEET_ID;
+if (!METRICS_PUBLISHED_BASE) METRICS_PUBLISHED_BASE = PUBLISHED_BASE;
+METRICS_EXPORT_BASE = METRICS_SHEET_ID ? `https://docs.google.com/spreadsheets/d/${METRICS_SHEET_ID}/export?format=csv` : '';
 if (!FUNNELS.length) {
   FUNNELS = [{
     id: 'default',
@@ -1516,7 +1529,9 @@ function buildSharePayload() {
         ]
       ],
       BRAND_NAME,
-      SURVEY_CONFIG
+      SURVEY_CONFIG,
+      METRICS_SHEET_ID,
+      METRICS_PUBLISHED_BASE
     ],
     t: [
       campaignContains,
@@ -1589,10 +1604,14 @@ try {
     }
     if (c[9]) BRAND_NAME = String(c[9]);
     if (c[10] && typeof c[10] === 'object') SURVEY_CONFIG = normalizeSurveyConfig(c[10]);
+    if (c[11] !== undefined) METRICS_SHEET_ID = String(c[11] || '');
+    if (c[12] !== undefined) METRICS_PUBLISHED_BASE = String(c[12] || '');
     if (c[5]) activeFunnelId = String(c[5]);
     localStorage.setItem(getCfgKey(), JSON.stringify({
       sheetId: SHEET_ID,
       publishedBase: PUBLISHED_BASE,
+      metricsSheetId: METRICS_SHEET_ID,
+      metricsPublishedBase: METRICS_PUBLISHED_BASE,
       brandName: BRAND_NAME,
       surveyConfig: SURVEY_CONFIG,
       gidEtapas: GID_ETAPAS,
@@ -1631,6 +1650,8 @@ try {
     const c = shared.cfg;
     if (c.sheetId) SHEET_ID = c.sheetId;
     if (c.publishedBase) PUBLISHED_BASE = c.publishedBase;
+    if (c.metricsSheetId) METRICS_SHEET_ID = c.metricsSheetId;
+    if (c.metricsPublishedBase) METRICS_PUBLISHED_BASE = c.metricsPublishedBase;
     if (c.gidEtapas !== undefined) GID_ETAPAS = String(c.gidEtapas || '');
     if (c.gidConv !== undefined) GID_CONV = String(c.gidConv || '');
     if (c.gidAds !== undefined) GID_ADS = String(c.gidAds || '');
@@ -1676,6 +1697,9 @@ try {
   }
 } catch {}
 EXPORT_BASE = SHEET_ID ? `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv` : '';
+if (!METRICS_SHEET_ID) METRICS_SHEET_ID = SHEET_ID;
+if (!METRICS_PUBLISHED_BASE) METRICS_PUBLISHED_BASE = PUBLISHED_BASE;
+METRICS_EXPORT_BASE = METRICS_SHEET_ID ? `https://docs.google.com/spreadsheets/d/${METRICS_SHEET_ID}/export?format=csv` : '';
 
 // ── TAB ────────────────────────────────
 function switchTab(tab) {
@@ -1727,6 +1751,8 @@ function persistConfigState() {
     localStorage.setItem(getCfgKey(), JSON.stringify({
       sheetId: SHEET_ID,
       publishedBase: PUBLISHED_BASE,
+      metricsSheetId: METRICS_SHEET_ID,
+      metricsPublishedBase: METRICS_PUBLISHED_BASE,
       brandName: BRAND_NAME,
       surveyConfig: SURVEY_CONFIG,
       gidEtapas: GID_ETAPAS,
@@ -1758,6 +1784,8 @@ function renderFunnelSelectors() {
 function fillConfigInputsFromGlobals() {
   const brandNameInput = document.getElementById('brandNameInput');
   if (brandNameInput) brandNameInput.value = BRAND_NAME;
+  const metricsLinkInput = document.getElementById('sheetLinkConfig');
+  if (metricsLinkInput) metricsLinkInput.value = METRICS_PUBLISHED_BASE || '';
   document.getElementById('gidEtapas').value = GID_ETAPAS;
   document.getElementById('gidConversoes').value = GID_CONV;
   document.getElementById('gidAds').value = GID_ADS;
@@ -2387,16 +2415,18 @@ async function fetchJsonOrThrow(url) {
   return res.json();
 }
 
-async function fetchSheetTabs() {
-  if (SHEET_ID) {
-    const url = `/api/sheets/tabs?spreadsheetId=${encodeURIComponent(SHEET_ID)}`;
+async function fetchSheetTabs(sourceType = 'research') {
+  const sid = sourceType === 'metrics' ? METRICS_SHEET_ID : SHEET_ID;
+  const pubBase = sourceType === 'metrics' ? METRICS_PUBLISHED_BASE : PUBLISHED_BASE;
+  if (sid) {
+    const url = `/api/sheets/tabs?spreadsheetId=${encodeURIComponent(sid)}`;
     const data = await fetchJsonOrThrow(url);
     const tabs = Array.isArray(data?.tabs) ? data.tabs : [];
     if (!tabs.length) throw new Error('Nenhuma aba encontrada via API do Google Sheets.');
     return tabs;
   }
 
-  const pubHtmlUrl = PUBLISHED_BASE.replace('/pub?output=csv', '/pubhtml');
+  const pubHtmlUrl = pubBase.replace('/pub?output=csv', '/pubhtml');
   const res = await fetch(pubHtmlUrl);
   if (!res.ok) throw new Error('Não foi possível ler abas da planilha publicada.');
   const html = await res.text();
@@ -2435,13 +2465,13 @@ async function autoFillGidsFromSheet() {
   btn.textContent = 'Buscando...';
   status.textContent = 'Lendo abas da planilha e comparando nomes...';
   try {
-    const parsed = parseSheetLink(document.getElementById('sheetLinkPesquisa')?.value);
-    if (parsed?.publishedBase) PUBLISHED_BASE = parsed.publishedBase;
+    const parsed = parseSheetLink(document.getElementById('sheetLinkConfig')?.value, METRICS_PUBLISHED_BASE);
+    if (parsed?.publishedBase) METRICS_PUBLISHED_BASE = parsed.publishedBase;
     if (parsed?.sheetId) {
-      SHEET_ID = parsed.sheetId;
-      EXPORT_BASE = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv`;
+      METRICS_SHEET_ID = parsed.sheetId;
+      METRICS_EXPORT_BASE = `https://docs.google.com/spreadsheets/d/${METRICS_SHEET_ID}/export?format=csv`;
     }
-    const tabs = await fetchSheetTabs();
+    const tabs = await fetchSheetTabs('metrics');
 
     const mapMain = [
       { id: 'gidEtapas', aliases: ['track etapas', 'tracking etapas', 'etapas'] },
@@ -2490,14 +2520,14 @@ async function autoFillConversionGidFromSheet() {
   const status = document.getElementById('autoConvGidStatus');
   if (status) status.textContent = 'Buscando aba de conversões...';
   try {
-    const parsed = parseSheetLink(document.getElementById('sheetLinkPesquisa')?.value);
+    const parsed = parseSheetLink(document.getElementById('sheetLinkPesquisa')?.value, PUBLISHED_BASE);
     if (!parsed) throw new Error('Cole um link válido da planilha.');
     if (parsed?.publishedBase) PUBLISHED_BASE = parsed.publishedBase;
     if (parsed?.sheetId) {
       SHEET_ID = parsed.sheetId;
       EXPORT_BASE = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv`;
     }
-    const tabs = await fetchSheetTabs();
+    const tabs = await fetchSheetTabs('research');
     let gid = findBestGidByName('conversoes', tabs)
       || findBestGidByName('conversões', tabs)
       || findBestGidByName('leads', tabs);
@@ -2521,7 +2551,7 @@ async function detectSurveyColumns() {
     if (!gid) throw new Error('Informe ou detecte primeiro o GID de conversões.');
     let rows = RAW.conv;
     if (!Array.isArray(rows) || !rows.length) {
-      rows = await fetchCSV(gid);
+      rows = await fetchCSV(gid, false, 'research');
     }
     const cols = getColumnsFromRows(rows).sort((a, b) => a.localeCompare(b));
     if (!cols.length) throw new Error('Nenhuma coluna encontrada nesta aba.');
@@ -2537,10 +2567,13 @@ async function detectSurveyColumns() {
 }
 
 // ── CSV FETCH ──────────────────────────
-async function fetchCSV(gid, useExport=false) {
+async function fetchCSV(gid, useExport=false, sourceType='research') {
   if (!gid && !useExport) throw new Error('GID da aba não informado.');
-  if (SHEET_ID) {
-    const url = `/api/sheets/csv?spreadsheetId=${encodeURIComponent(SHEET_ID)}&gid=${encodeURIComponent(gid)}`;
+  const sid = sourceType === 'metrics' ? METRICS_SHEET_ID : SHEET_ID;
+  const pubBase = sourceType === 'metrics' ? METRICS_PUBLISHED_BASE : PUBLISHED_BASE;
+  const exportBase = sourceType === 'metrics' ? METRICS_EXPORT_BASE : EXPORT_BASE;
+  if (sid) {
+    const url = `/api/sheets/csv?spreadsheetId=${encodeURIComponent(sid)}&gid=${encodeURIComponent(gid)}`;
     const res = await fetch(url);
     if (!res.ok) {
       let msg = 'Planilha privada não acessível.';
@@ -2554,9 +2587,9 @@ async function fetchCSV(gid, useExport=false) {
     return parseCSV(text);
   }
 
-  const url = (useExport && EXPORT_BASE)
-    ? EXPORT_BASE + '&gid=' + gid
-    : PUBLISHED_BASE + '&gid=' + gid;
+  const url = (useExport && exportBase)
+    ? exportBase + '&gid=' + gid
+    : pubBase + '&gid=' + gid;
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), 20000);
   let res;
@@ -2605,7 +2638,7 @@ function parseCSV(text) {
   });
 }
 
-function parseSheetLink(input) {
+function parseSheetLink(input, fallbackPublishedBase = PUBLISHED_BASE) {
   const url = String(input || '').trim();
   if (!url) return null;
 
@@ -2620,7 +2653,7 @@ function parseSheetLink(input) {
   const mRaw = url.match(/^https:\/\/docs\.google\.com\/spreadsheets\/d\/([^/]+)\/.*$/i);
   if (mRaw) {
     return {
-      publishedBase: PUBLISHED_BASE,
+      publishedBase: fallbackPublishedBase,
       sheetId: mRaw[1]
     };
   }
@@ -2637,28 +2670,28 @@ async function loadAll() {
   document.getElementById('configScreen').style.display  = 'none';
 
   try {
-    const safeFetch = async (gid, useExport=false) => {
-      try { return await fetchCSV(gid, useExport); }
+    const safeFetch = async (gid, useExport=false, sourceType='metrics') => {
+      try { return await fetchCSV(gid, useExport, sourceType); }
       catch (e) { console.warn('Falha ao carregar GID', gid, e); return []; }
     };
 
     const jobs = [
-      GID_ETAPAS ? safeFetch(GID_ETAPAS).then(d => RAW.etapas = d) : Promise.resolve(RAW.etapas = []),
-      GID_CONV ? safeFetch(GID_CONV).then(d => RAW.conv = d) : Promise.resolve(RAW.conv = []),
+      GID_ETAPAS ? safeFetch(GID_ETAPAS, false, 'metrics').then(d => RAW.etapas = d) : Promise.resolve(RAW.etapas = []),
+      GID_CONV ? safeFetch(GID_CONV, false, 'research').then(d => RAW.conv = d) : Promise.resolve(RAW.conv = []),
     ];
     RAW.stages = {};
     STAGE_CONFIGS.forEach(s => {
       const gid = String(s.gid || '').trim();
       if (!gid) return;
       jobs.push(
-        safeFetch(gid).then(d => { RAW.stages[gid] = d; })
+        safeFetch(gid, false, 'metrics').then(d => { RAW.stages[gid] = d; })
       );
     });
     if (GID_ADS) {
       jobs.push(
-        safeFetch(GID_ADS, true)
+        safeFetch(GID_ADS, true, 'metrics')
           .then(d => RAW.ads = d)
-          .then(() => { if (!RAW.ads.length) return safeFetch(GID_ADS).then(d => RAW.ads = d); })
+          .then(() => { if (!RAW.ads.length) return safeFetch(GID_ADS, false, 'metrics').then(d => RAW.ads = d); })
           .catch(e => { console.warn('Ads não disponível:', e); RAW.ads = []; })
       );
     }
@@ -4584,11 +4617,17 @@ async function saveConfigAndLoad() {
   applyTenantFromInput(true);
   syncMetricRulesFromConfigInputs();
   refreshMetricStageSources();
-  const parsedSheet = parseSheetLink(document.getElementById('sheetLinkPesquisa')?.value);
-  if (parsedSheet?.publishedBase) PUBLISHED_BASE = parsedSheet.publishedBase;
-  if (parsedSheet?.sheetId) {
-    SHEET_ID = parsedSheet.sheetId;
+  const parsedSurveySheet = parseSheetLink(document.getElementById('sheetLinkPesquisa')?.value, PUBLISHED_BASE);
+  if (parsedSurveySheet?.publishedBase) PUBLISHED_BASE = parsedSurveySheet.publishedBase;
+  if (parsedSurveySheet?.sheetId) {
+    SHEET_ID = parsedSurveySheet.sheetId;
     EXPORT_BASE = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv`;
+  }
+  const parsedMetricsSheet = parseSheetLink(document.getElementById('sheetLinkConfig')?.value, METRICS_PUBLISHED_BASE);
+  if (parsedMetricsSheet?.publishedBase) METRICS_PUBLISHED_BASE = parsedMetricsSheet.publishedBase;
+  if (parsedMetricsSheet?.sheetId) {
+    METRICS_SHEET_ID = parsedMetricsSheet.sheetId;
+    METRICS_EXPORT_BASE = `https://docs.google.com/spreadsheets/d/${METRICS_SHEET_ID}/export?format=csv`;
   }
   if (hasMissingMainGids()) {
     try {
@@ -4610,6 +4649,7 @@ async function saveConfigAndLoad() {
 
 // ── INIT ────────────────────────────────
 document.getElementById('sheetLinkPesquisa').value = PUBLISHED_BASE;
+document.getElementById('sheetLinkConfig').value = METRICS_PUBLISHED_BASE;
 document.getElementById('tenantKey').value     = CLIENT_KEY;
 document.getElementById('brandNameInput').value = BRAND_NAME;
 document.getElementById('campContains').value  = campaignContains;
