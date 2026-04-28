@@ -2891,6 +2891,22 @@ function hasAttributionValue(v) {
   return true;
 }
 
+function normUtm(v) {
+  return normKey(String(v || '').trim());
+}
+
+function matchesAnyUtmPattern(c, a, ad, pattern) {
+  const p = normUtm(pattern);
+  if (!p) return true;
+  return [c, a, ad].some((x) => normUtm(x).includes(p));
+}
+
+function matchesAnyUtmExact(c, a, ad, expected) {
+  const e = normUtm(expected);
+  if (!e) return true;
+  return [c, a, ad].some((x) => normUtm(x) === e);
+}
+
 function rowMatchesMetricRule(r, rule) {
   if (!rule) return false;
   if (rule.available === false) return false;
@@ -2992,14 +3008,12 @@ function countStageInPeriod(rows, filters, metricKey = 'lead') {
     const c = getLeadUtmCampaign(r);
     const a = getLeadUtmContent(r);
     const ad = getLeadUtmTerm(r);
-    const hasCampaign = hasAttributionValue(c);
-    const hasAdset = hasAttributionValue(a);
-    const hasAd = hasAttributionValue(ad);
-    // Não elimina linhas sem UTM por filtros de campanha.
-    if (filters.campPattern && hasCampaign && !normKey(c).includes(normKey(filters.campPattern))) return;
-    if (filters.fCamp && hasCampaign && c !== filters.fCamp) return;
-    if (filters.fAdset && hasAdset && a !== filters.fAdset) return;
-    if (filters.fAd && hasAd && ad !== filters.fAd) return;
+    const hasAnyUtm = hasAttributionValue(c) || hasAttributionValue(a) || hasAttributionValue(ad);
+    // Match por qualquer UTM (campaign/content/term) para alinhamento com atribuição de tráfego.
+    if (filters.campPattern && hasAnyUtm && !matchesAnyUtmPattern(c, a, ad, filters.campPattern)) return;
+    if (filters.fCamp && hasAnyUtm && !matchesAnyUtmExact(c, a, ad, filters.fCamp)) return;
+    if (filters.fAdset && hasAnyUtm && !matchesAnyUtmExact(c, a, ad, filters.fAdset)) return;
+    if (filters.fAd && hasAnyUtm && !matchesAnyUtmExact(c, a, ad, filters.fAd)) return;
     count++;
   });
   return count;
@@ -3745,13 +3759,11 @@ function renderTrafego() {
         const c = getLeadUtmCampaign(r);
         const a = getLeadUtmContent(r);
         const ad = getLeadUtmTerm(r);
-        const hasCampaign = hasAttributionValue(c);
-        const hasAdset = hasAttributionValue(a);
-        const hasAd = hasAttributionValue(ad);
-        if (campPattern && hasCampaign && !normKey(c).includes(normKey(campPattern))) return;
-        if (fCamp && hasCampaign && c !== fCamp) return;
-        if (fAdset && hasAdset && a !== fAdset) return;
-        if (fAd && hasAd && ad !== fAd) return;
+        const hasAnyUtm = hasAttributionValue(c) || hasAttributionValue(a) || hasAttributionValue(ad);
+        if (campPattern && hasAnyUtm && !matchesAnyUtmPattern(c, a, ad, campPattern)) return;
+        if (fCamp && hasAnyUtm && !matchesAnyUtmExact(c, a, ad, fCamp)) return;
+        if (fAdset && hasAnyUtm && !matchesAnyUtmExact(c, a, ad, fAdset)) return;
+        if (fAd && hasAnyUtm && !matchesAnyUtmExact(c, a, ad, fAd)) return;
         const k = dateKey(d);
         out[k] = (out[k] || 0) + 1;
       }
