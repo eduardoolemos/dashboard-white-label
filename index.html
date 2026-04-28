@@ -317,7 +317,6 @@ tbody td { padding:11px 12px; font-size:13px; color:var(--text); }
         <button class="btn-ghost" type="button" onclick="autoMapSurveyFieldsFromDetectedColumns()">Preencher mapeamento automático</button>
         <div class="config-status" id="surveyMapStatus"></div>
         <div id="surveyQuestionMappings"></div>
-        <button class="btn-stage-add" type="button" onclick="addSurveyQuestionMapping()">+ Adicionar pergunta</button>
       </div>
       <div class="stage-config-wrap">
         <div class="stage-config-title">Regras de qualificação</div>
@@ -1065,7 +1064,14 @@ const DEFAULT_SURVEY_CONFIG = {
     faturamento: '',
     lojista: ''
   },
-  questionMappings: [],
+  questionMappings: [
+    { targetKey: 'prioridade', questionText: '', column: '' },
+    { targetKey: 'situacao', questionText: '', column: '' },
+    { targetKey: 'urgencia', questionText: '', column: '' },
+    { targetKey: 'estoque', questionText: '', column: '' },
+    { targetKey: 'faturamento', questionText: '', column: '' },
+    { targetKey: 'lojista', questionText: '', column: '' }
+  ],
   detectedColumns: [],
   qualificationRules: [
     { column: '', operator: 'contains', value: 'sim' },
@@ -1110,7 +1116,11 @@ function normalizeSurveyConfig(raw) {
       faturamento: String(fieldQuestions.faturamento || ''),
       lojista: String(fieldQuestions.lojista || '')
     },
-    questionMappings: questionMappingsRaw.map((m) => ({
+    questionMappings: (questionMappingsRaw.length ? questionMappingsRaw : SURVEY_TARGET_FIELDS.map((f) => ({
+      targetKey: f.key,
+      questionText: String(fieldQuestions[f.key] || ''),
+      column: String(fieldMap[f.key] || '')
+    }))).map((m) => ({
       targetKey: SURVEY_TARGET_FIELDS.some((f) => f.key === String(m?.targetKey || '')) ? String(m.targetKey) : '',
       questionText: String(m?.questionText || '').trim(),
       column: String(m?.column || '').trim()
@@ -1811,44 +1821,36 @@ function renderSurveyQuestionMappings() {
   const host = document.getElementById('surveyQuestionMappings');
   if (!host) return;
   const cols = getSurveyColumnOptions();
-  const targetOptions = ['<option value="">Selecionar campo</option>']
-    .concat(SURVEY_TARGET_FIELDS.map((f) => `<option value="${f.key}">${f.label}</option>`))
-    .join('');
-  const rows = Array.isArray(SURVEY_CONFIG.questionMappings) ? SURVEY_CONFIG.questionMappings : [];
-  if (!rows.length) {
-    host.innerHTML = '<div class="config-hint" style="margin:6px 0 10px;">Nenhuma pergunta adicionada ainda. Clique em "+ Adicionar pergunta" para montar o mapeamento desse cliente.</div>';
-    return;
-  }
-  host.innerHTML = rows.map((m, idx) => {
+  const rows = SURVEY_TARGET_FIELDS.map((f) => {
+    const found = (SURVEY_CONFIG.questionMappings || []).find((m) => m.targetKey === f.key);
+    return {
+      targetKey: f.key,
+      label: f.label,
+      questionText: String(found?.questionText || ''),
+      column: String(found?.column || '')
+    };
+  });
+  host.innerHTML = rows.map((m) => {
     const colOptions = ['<option value="">Selecionar coluna</option>']
       .concat(cols.map((c) => `<option value="${c.replace(/"/g, '&quot;')}" ${c === m.column ? 'selected' : ''}>${c}</option>`))
       .join('');
     return `
       <div class="stage-row">
-        <select class="camp-select" onchange="onSurveyQuestionMappingChange(${idx}, 'targetKey', this.value)">${targetOptions.replace(`value="${m.targetKey}"`, `value="${m.targetKey}" selected`)}</select>
-        <input type="text" value="${String(m.questionText || '').replace(/"/g, '&quot;')}" placeholder="Texto da pergunta" onchange="onSurveyQuestionMappingChange(${idx}, 'questionText', this.value)">
-        <select class="camp-select" onchange="onSurveyQuestionMappingChange(${idx}, 'column', this.value)">${colOptions}</select>
-        <button class="btn-stage-remove" type="button" onclick="removeSurveyQuestionMapping(${idx})">Excluir</button>
+        <input type="text" value="${String(m.questionText || '').replace(/"/g, '&quot;')}" placeholder="${m.label} - texto da pergunta" onchange="onSurveyQuestionMappingChange('${m.targetKey}', 'questionText', this.value)">
+        <select class="camp-select" onchange="onSurveyQuestionMappingChange('${m.targetKey}', 'column', this.value)">${colOptions}</select>
       </div>
     `;
   }).join('');
 }
 
-function addSurveyQuestionMapping() {
+function onSurveyQuestionMappingChange(targetKey, field, value) {
   if (!Array.isArray(SURVEY_CONFIG.questionMappings)) SURVEY_CONFIG.questionMappings = [];
-  SURVEY_CONFIG.questionMappings.push({ targetKey: '', questionText: '', column: '' });
-  renderSurveyQuestionMappings();
-}
-
-function removeSurveyQuestionMapping(index) {
-  if (!Array.isArray(SURVEY_CONFIG.questionMappings)) return;
-  SURVEY_CONFIG.questionMappings.splice(index, 1);
-  renderSurveyQuestionMappings();
-}
-
-function onSurveyQuestionMappingChange(index, field, value) {
-  if (!Array.isArray(SURVEY_CONFIG.questionMappings) || !SURVEY_CONFIG.questionMappings[index]) return;
-  SURVEY_CONFIG.questionMappings[index][field] = String(value || '').trim();
+  let row = SURVEY_CONFIG.questionMappings.find((m) => m.targetKey === targetKey);
+  if (!row) {
+    row = { targetKey, questionText: '', column: '' };
+    SURVEY_CONFIG.questionMappings.push(row);
+  }
+  row[field] = String(value || '').trim();
 }
 
 function autoMapSurveyFieldsFromDetectedColumns() {
