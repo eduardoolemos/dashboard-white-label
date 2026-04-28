@@ -312,22 +312,57 @@ tbody td { padding:11px 12px; font-size:13px; color:var(--text); }
       </div>
       <div class="stage-config-wrap">
         <div class="stage-config-title">Validação de leads</div>
-        <div class="config-hint" style="margin-bottom:10px;">Defina como identificar o que conta como lead na sua planilha.</div>
-        <div class="config-field">
-          <label>Colunas para validar lead (aliases, separados por vírgula)</label>
-          <input type="text" id="leadRuleFieldAliases" placeholder="Ex: qualificação, status, mql">
-          <div class="config-hint">O sistema tenta encontrar qualquer uma dessas colunas por nome normalizado.</div>
-        </div>
-        <div class="config-field">
-          <label>Valores que contam como lead (separados por vírgula)</label>
-          <input type="text" id="leadRulePositiveValues" placeholder="Ex: lead, qualificado, mql, sim">
-        </div>
-        <div class="config-field">
-          <label class="toggle-switch" style="margin-left:0;">
-            <input type="checkbox" id="leadRuleRequirePaid" checked>
-            <span class="toggle-track"><span class="toggle-thumb"></span></span>
-            <span class="toggle-label">Exigir utm_campaign preenchida (somente leads de tráfego)</span>
-          </label>
+        <div class="config-hint" style="margin-bottom:10px;">Configure a regra de contagem por métrica (tipo tabela).</div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Métrica</th>
+                <th>Tipo de contagem</th>
+                <th>Coluna filtro</th>
+                <th>Valor filtro</th>
+                <th>Somente tráfego</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td class="td-mono">Lead</td>
+                <td>
+                  <select class="sort-select" id="ruleLeadMode">
+                    <option value="count_all">Contagem simples</option>
+                    <option value="count_filtered">Contagem com filtro</option>
+                  </select>
+                </td>
+                <td><input class="funnel-input" id="ruleLeadColumn" placeholder="Ex: status"></td>
+                <td><input class="funnel-input" id="ruleLeadValue" placeholder="Ex: lead"></td>
+                <td>
+                  <label class="toggle-switch" style="margin-left:0;">
+                    <input type="checkbox" id="ruleLeadRequirePaid" checked>
+                    <span class="toggle-track"><span class="toggle-thumb"></span></span>
+                    <span class="toggle-label">UTM</span>
+                  </label>
+                </td>
+              </tr>
+              <tr>
+                <td class="td-mono">Lead Qualificado (MQL)</td>
+                <td>
+                  <select class="sort-select" id="ruleMqlMode">
+                    <option value="count_all">Contagem simples</option>
+                    <option value="count_filtered">Contagem com filtro</option>
+                  </select>
+                </td>
+                <td><input class="funnel-input" id="ruleMqlColumn" placeholder="Ex: qualificação"></td>
+                <td><input class="funnel-input" id="ruleMqlValue" placeholder="Ex: qualificado"></td>
+                <td>
+                  <label class="toggle-switch" style="margin-left:0;">
+                    <input type="checkbox" id="ruleMqlRequirePaid" checked>
+                    <span class="toggle-track"><span class="toggle-thumb"></span></span>
+                    <span class="toggle-label">UTM</span>
+                  </label>
+                </td>
+              </tr>
+            </tbody>
+          </table>
         </div>
       </div>
       <div class="config-field">
@@ -881,6 +916,21 @@ const DEFAULT_STAGE_CONFIGS = [
 let STAGE_CONFIGS = DEFAULT_STAGE_CONFIGS.map(s => ({ ...s }));
 let FUNNELS = [];
 let activeFunnelId = 'default';
+const DEFAULT_METRIC_RULES = {
+  lead: {
+    mode: 'count_all',
+    filterColumn: '',
+    filterValue: '',
+    requirePaidCampaign: true
+  },
+  mql: {
+    mode: 'count_filtered',
+    filterColumn: 'qualificacao',
+    filterValue: 'qualificado',
+    requirePaidCampaign: true
+  }
+};
+let METRIC_RULES = JSON.parse(JSON.stringify(DEFAULT_METRIC_RULES));
 CLIENT_KEY = getTenantFromUrl();
 
 try {
@@ -890,15 +940,36 @@ try {
   if (saved.gidEtapas) GID_ETAPAS = saved.gidEtapas;
   if (saved.gidConv)   GID_CONV   = saved.gidConv;
   if (saved.gidAds)    GID_ADS    = saved.gidAds;
-  if (saved.leadRules && typeof saved.leadRules === 'object') {
-    LEAD_RULES = {
-      fieldAliases: Array.isArray(saved.leadRules.fieldAliases) && saved.leadRules.fieldAliases.length
-        ? saved.leadRules.fieldAliases.map(v => String(v || '').trim()).filter(Boolean)
-        : DEFAULT_LEAD_RULES.fieldAliases.slice(),
-      positiveValues: Array.isArray(saved.leadRules.positiveValues) && saved.leadRules.positiveValues.length
-        ? saved.leadRules.positiveValues.map(v => String(v || '').trim()).filter(Boolean)
-        : DEFAULT_LEAD_RULES.positiveValues.slice(),
-      requirePaidCampaign: saved.leadRules.requirePaidCampaign !== false
+  if (saved.metricRules && typeof saved.metricRules === 'object') {
+    METRIC_RULES = {
+      lead: {
+        mode: saved.metricRules?.lead?.mode === 'count_filtered' ? 'count_filtered' : 'count_all',
+        filterColumn: String(saved.metricRules?.lead?.filterColumn || ''),
+        filterValue: String(saved.metricRules?.lead?.filterValue || ''),
+        requirePaidCampaign: saved.metricRules?.lead?.requirePaidCampaign !== false
+      },
+      mql: {
+        mode: saved.metricRules?.mql?.mode === 'count_all' ? 'count_all' : 'count_filtered',
+        filterColumn: String(saved.metricRules?.mql?.filterColumn || 'qualificacao'),
+        filterValue: String(saved.metricRules?.mql?.filterValue || 'qualificado'),
+        requirePaidCampaign: saved.metricRules?.mql?.requirePaidCampaign !== false
+      }
+    };
+  } else if (saved.leadRules && typeof saved.leadRules === 'object') {
+    const fallbackCol = Array.isArray(saved.leadRules.fieldAliases) && saved.leadRules.fieldAliases.length
+      ? String(saved.leadRules.fieldAliases[0] || '')
+      : 'status';
+    const fallbackVal = Array.isArray(saved.leadRules.positiveValues) && saved.leadRules.positiveValues.length
+      ? String(saved.leadRules.positiveValues[0] || '')
+      : 'lead';
+    METRIC_RULES = {
+      lead: {
+        mode: 'count_filtered',
+        filterColumn: fallbackCol,
+        filterValue: fallbackVal,
+        requirePaidCampaign: saved.leadRules.requirePaidCampaign !== false
+      },
+      mql: { ...DEFAULT_METRIC_RULES.mql }
     };
   }
   if (saved.activeFunnelId) activeFunnelId = String(saved.activeFunnelId);
@@ -959,12 +1030,6 @@ const DEFAULT_VISIBLE_METRICS = [
   'cAgendada','cConfirmada','cNoShow','cCallFeita'
 ];
 let visibleMetrics = new Set(DEFAULT_VISIBLE_METRICS);
-const DEFAULT_LEAD_RULES = {
-  fieldAliases: ['qualificacao', 'qualificado', 'status', 'mql'],
-  positiveValues: ['lead', 'qualificado', 'mql', 'sim', 'true', '1'],
-  requirePaidCampaign: true
-};
-let LEAD_RULES = { ...DEFAULT_LEAD_RULES };
 
 let RAW = { etapas:[], conv:[], ads:[], stages:{} };
 let RAW_CONV_VIEW = [];
@@ -1124,9 +1189,18 @@ function buildSharePayload() {
       packFunnels(FUNNELS),
       packStages(STAGE_CONFIGS),
       [
-        (LEAD_RULES.fieldAliases || []).join(','),
-        (LEAD_RULES.positiveValues || []).join(','),
-        LEAD_RULES.requirePaidCampaign !== false ? 1 : 0
+        [
+          METRIC_RULES.lead.mode,
+          METRIC_RULES.lead.filterColumn,
+          METRIC_RULES.lead.filterValue,
+          METRIC_RULES.lead.requirePaidCampaign !== false ? 1 : 0
+        ],
+        [
+          METRIC_RULES.mql.mode,
+          METRIC_RULES.mql.filterColumn,
+          METRIC_RULES.mql.filterValue,
+          METRIC_RULES.mql.requirePaidCampaign !== false ? 1 : 0
+        ]
       ]
     ],
     t: [
@@ -1181,13 +1255,22 @@ try {
       FUNNELS = unpackFunnels(c[6]);
     }
     if (Array.isArray(c[8])) {
-      LEAD_RULES = {
-        fieldAliases: parseCsvList(c[8][0]),
-        positiveValues: parseCsvList(c[8][1]),
-        requirePaidCampaign: Number(c[8][2]) !== 0
+      const lead = Array.isArray(c[8][0]) ? c[8][0] : [];
+      const mql = Array.isArray(c[8][1]) ? c[8][1] : [];
+      METRIC_RULES = {
+        lead: {
+          mode: lead[0] === 'count_filtered' ? 'count_filtered' : 'count_all',
+          filterColumn: String(lead[1] || ''),
+          filterValue: String(lead[2] || ''),
+          requirePaidCampaign: Number(lead[3]) !== 0
+        },
+        mql: {
+          mode: mql[0] === 'count_all' ? 'count_all' : 'count_filtered',
+          filterColumn: String(mql[1] || 'qualificacao'),
+          filterValue: String(mql[2] || 'qualificado'),
+          requirePaidCampaign: Number(mql[3]) !== 0
+        }
       };
-      if (!LEAD_RULES.fieldAliases.length) LEAD_RULES.fieldAliases = DEFAULT_LEAD_RULES.fieldAliases.slice();
-      if (!LEAD_RULES.positiveValues.length) LEAD_RULES.positiveValues = DEFAULT_LEAD_RULES.positiveValues.slice();
     }
     if (c[5]) activeFunnelId = String(c[5]);
     localStorage.setItem(getCfgKey(), JSON.stringify({
@@ -1196,7 +1279,7 @@ try {
       gidEtapas: GID_ETAPAS,
       gidConv: GID_CONV,
       gidAds: GID_ADS,
-      leadRules: LEAD_RULES,
+      metricRules: METRIC_RULES,
       stageConfigs: STAGE_CONFIGS,
       activeFunnelId,
       funnels: FUNNELS
@@ -1322,7 +1405,7 @@ function persistConfigState() {
       gidEtapas: GID_ETAPAS,
       gidConv: GID_CONV,
       gidAds: GID_ADS,
-      leadRules: LEAD_RULES,
+      metricRules: METRIC_RULES,
       stageConfigs: STAGE_CONFIGS,
       activeFunnelId,
       funnels: FUNNELS
@@ -1351,33 +1434,43 @@ function fillConfigInputsFromGlobals() {
   document.getElementById('gidAds').value = GID_ADS;
   document.getElementById('defaultCampContains').value = campaignContains;
   document.getElementById('campContains').value = campaignContains;
-  const leadAliases = document.getElementById('leadRuleFieldAliases');
-  const leadPositive = document.getElementById('leadRulePositiveValues');
-  const leadRequirePaid = document.getElementById('leadRuleRequirePaid');
-  if (leadAliases) leadAliases.value = (LEAD_RULES.fieldAliases || []).join(', ');
-  if (leadPositive) leadPositive.value = (LEAD_RULES.positiveValues || []).join(', ');
-  if (leadRequirePaid) leadRequirePaid.checked = LEAD_RULES.requirePaidCampaign !== false;
+  const leadMode = document.getElementById('ruleLeadMode');
+  const leadCol = document.getElementById('ruleLeadColumn');
+  const leadVal = document.getElementById('ruleLeadValue');
+  const leadPaid = document.getElementById('ruleLeadRequirePaid');
+  const mqlMode = document.getElementById('ruleMqlMode');
+  const mqlCol = document.getElementById('ruleMqlColumn');
+  const mqlVal = document.getElementById('ruleMqlValue');
+  const mqlPaid = document.getElementById('ruleMqlRequirePaid');
+
+  if (leadMode) leadMode.value = METRIC_RULES.lead.mode;
+  if (leadCol) leadCol.value = METRIC_RULES.lead.filterColumn;
+  if (leadVal) leadVal.value = METRIC_RULES.lead.filterValue;
+  if (leadPaid) leadPaid.checked = METRIC_RULES.lead.requirePaidCampaign !== false;
+  if (mqlMode) mqlMode.value = METRIC_RULES.mql.mode;
+  if (mqlCol) mqlCol.value = METRIC_RULES.mql.filterColumn;
+  if (mqlVal) mqlVal.value = METRIC_RULES.mql.filterValue;
+  if (mqlPaid) mqlPaid.checked = METRIC_RULES.mql.requirePaidCampaign !== false;
   renderStageConfigs();
 }
 
-function parseCsvList(v) {
-  return String(v || '')
-    .split(',')
-    .map(s => String(s || '').trim())
-    .filter(Boolean);
-}
-
-function syncLeadRulesFromConfigInputs() {
-  const aliasesInput = document.getElementById('leadRuleFieldAliases')?.value || '';
-  const positiveInput = document.getElementById('leadRulePositiveValues')?.value || '';
-  const requirePaid = !!document.getElementById('leadRuleRequirePaid')?.checked;
-  LEAD_RULES = {
-    fieldAliases: parseCsvList(aliasesInput),
-    positiveValues: parseCsvList(positiveInput),
-    requirePaidCampaign: requirePaid
+function syncMetricRulesFromConfigInputs() {
+  METRIC_RULES = {
+    lead: {
+      mode: document.getElementById('ruleLeadMode')?.value === 'count_filtered' ? 'count_filtered' : 'count_all',
+      filterColumn: String(document.getElementById('ruleLeadColumn')?.value || '').trim(),
+      filterValue: String(document.getElementById('ruleLeadValue')?.value || '').trim(),
+      requirePaidCampaign: !!document.getElementById('ruleLeadRequirePaid')?.checked
+    },
+    mql: {
+      mode: document.getElementById('ruleMqlMode')?.value === 'count_all' ? 'count_all' : 'count_filtered',
+      filterColumn: String(document.getElementById('ruleMqlColumn')?.value || '').trim(),
+      filterValue: String(document.getElementById('ruleMqlValue')?.value || '').trim(),
+      requirePaidCampaign: !!document.getElementById('ruleMqlRequirePaid')?.checked
+    }
   };
-  if (!LEAD_RULES.fieldAliases.length) LEAD_RULES.fieldAliases = DEFAULT_LEAD_RULES.fieldAliases.slice();
-  if (!LEAD_RULES.positiveValues.length) LEAD_RULES.positiveValues = DEFAULT_LEAD_RULES.positiveValues.slice();
+  if (!METRIC_RULES.mql.filterColumn) METRIC_RULES.mql.filterColumn = 'qualificacao';
+  if (!METRIC_RULES.mql.filterValue) METRIC_RULES.mql.filterValue = 'qualificado';
 }
 
 function onDefaultCampaignPatternChange(value) {
@@ -2410,38 +2503,30 @@ function getLeadUtmTerm(row) {
   return getLeadFieldValue(row, ['utm_term', 'utm term', 'utmterm']);
 }
 
-function isPaidLeadRow(r) {
-  const aliases = (LEAD_RULES.fieldAliases || []).map(v => String(v || '').trim()).filter(Boolean);
-  const positives = new Set((LEAD_RULES.positiveValues || []).map(v => normalizeName(v)).filter(Boolean));
-  if (aliases.length) {
-    const fieldVal = normalizeName(getLeadFieldValue(r, aliases));
-    if (fieldVal && positives.size && !positives.has(fieldVal)) return false;
-    if (!fieldVal) return false;
-  }
+function isPaidCampaignRow(r) {
   const camp = getLeadUtmCampaign(r);
-  if (LEAD_RULES.requirePaidCampaign !== false) {
-    return !!camp && camp !== '-' && !camp.startsWith('{{');
+  return !!camp && camp !== '-' && !camp.startsWith('{{');
+}
+
+function rowMatchesMetricRule(r, rule) {
+  if (!rule) return false;
+  if (rule.requirePaidCampaign !== false && !isPaidCampaignRow(r)) return false;
+  if (rule.mode === 'count_filtered') {
+    const col = String(rule.filterColumn || '').trim();
+    const wanted = normalizeName(rule.filterValue || '');
+    if (!col || !wanted) return false;
+    const got = normalizeName(getLeadFieldValue(r, [col]));
+    return !!got && got === wanted;
   }
   return true;
 }
 
+function isLeadRow(r) {
+  return rowMatchesMetricRule(r, METRIC_RULES.lead);
+}
+
 function isMqlRow(r) {
-  const entries = Object.entries(r || {});
-  const qualEntry = entries.find(([k]) => {
-    const nk = normalizeName(k).replace(/\s+/g, '');
-    return nk.includes('qualificacao') || nk.includes('qualificado') || nk === 'mql' || nk.includes('status');
-  });
-
-  if (qualEntry) {
-    const v = normalizeName(qualEntry[1]);
-    if (!v) return false;
-    if (v.includes('desqualificado')) return false;
-    if (v.includes('qualificado') || v === 'mql' || v === 'sim' || v === 'true' || v === '1') return true;
-  }
-
-  // Fallback defensivo quando a coluna vier com nome inesperado
-  const rowText = normalizeName(Object.values(r || {}).join(' '));
-  return rowText.includes('qualificado') && !rowText.includes('desqualificado');
+  return rowMatchesMetricRule(r, METRIC_RULES.mql);
 }
 
 function getTrafficLeadStats() {
@@ -2450,7 +2535,7 @@ function getTrafficLeadStats() {
   const dateCol = getTrafficLeadDateCol(rows);
   let leads = 0, mql = 0;
   rows.forEach(r => {
-    if (!isPaidLeadRow(r)) return;
+    if (!isLeadRow(r)) return;
     if (dateCol) {
       const d = parseDate(r[dateCol]);
       if (!inPeriod(d)) return;
@@ -2480,7 +2565,7 @@ function countStageInPeriod(rows, filters) {
   const dateCol = getTrafficLeadDateCol(rows);
   let count = 0;
   rows.forEach(r => {
-    if (!isPaidLeadRow(r)) return;
+    if (!isLeadRow(r)) return;
     if (dateCol) {
       const d = parseDate(r[dateCol]);
       if (!inPeriod(d)) return;
@@ -2503,7 +2588,7 @@ function leadsByDay() {
   const dateCol = getTrafficLeadDateCol(rows);
   const byDay = {};
   rows.forEach(r => {
-    if (!isPaidLeadRow(r)) return;
+    if (!isLeadRow(r)) return;
     if (dateCol) {
       const d = parseDate(r[dateCol]);
       if (!inPeriod(d)) return;
@@ -3209,7 +3294,7 @@ function renderTrafego() {
     const dateCol = getTrafficLeadDateCol(rows);
     const out = {};
     rows.forEach(r => {
-      if (!isPaidLeadRow(r)) return;
+      if (!isLeadRow(r)) return;
       if (dateCol) {
         const d = parseDate(r[dateCol]);
         if (!inPeriod(d)) return;
@@ -3487,7 +3572,7 @@ function hasMissingMainGids() {
 
 async function saveConfigAndLoad() {
   applyTenantFromInput(true);
-  syncLeadRulesFromConfigInputs();
+  syncMetricRulesFromConfigInputs();
   const parsedSheet = parseSheetLink(document.getElementById('sheetLink').value);
   if (parsedSheet?.publishedBase) PUBLISHED_BASE = parsedSheet.publishedBase;
   if (parsedSheet?.sheetId) {
