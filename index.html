@@ -929,7 +929,6 @@ const DEFAULT_STAGE_CONFIGS = [
   { name: 'Call Feita', gid: '' }
 ];
 const STANDARD_STAGE_CONFIGS = [
-  { name: 'Leads Forms nativo', gid: '' },
   { name: 'Leads', gid: '' },
   { name: 'Reunião Agendada', gid: '' },
   { name: 'Proposta enviada', gid: '' }
@@ -1003,14 +1002,14 @@ function buildStandardMetricRules() {
   return {
     lead: {
       ...DEFAULT_METRIC_RULES.lead,
-      sourceKey: findStageSourceByAliases(['leads forms nativo', 'leads']),
+      sourceKey: findStageSourceByAliases(['leads']),
       mode: 'count_filtered',
       filterColumn: 'Contagem',
       filterValue: 'Lead',
     },
     mql: {
       ...DEFAULT_METRIC_RULES.mql,
-      sourceKey: findStageSourceByAliases(['leads forms nativo', 'leads']),
+      sourceKey: findStageSourceByAliases(['leads']),
       mode: 'count_filtered',
       filterColumn: 'Qualificação',
       filterValue: 'Qualificado',
@@ -1050,8 +1049,8 @@ function buildStandardMetricRules() {
 }
 
 function refreshMetricStageSources() {
-  METRIC_RULES.lead.sourceKey = findStageSourceByAliases(['leads forms nativo', 'leads']);
-  METRIC_RULES.mql.sourceKey = findStageSourceByAliases(['leads forms nativo', 'leads']);
+  METRIC_RULES.lead.sourceKey = findStageSourceByAliases(['leads']);
+  METRIC_RULES.mql.sourceKey = findStageSourceByAliases(['leads']);
   METRIC_RULES.agendada.sourceKey = findStageSourceByAliases(['reuniao agendada', 'reunião agendada', 'contato de confirmacao']);
   METRIC_RULES.confirmada.sourceKey = findStageSourceByAliases(['proposta enviada', 'call confirmada', 'reuniao confirmada', 'reunião confirmada']);
   METRIC_RULES.noShow.sourceKey = findStageSourceByAliases(['no-show', 'no show']);
@@ -2014,7 +2013,7 @@ async function autoFillGidsFromSheet() {
 
     const mapMain = [
       { id: 'gidEtapas', aliases: ['track etapas', 'tracking etapas', 'etapas'] },
-      { id: 'gidConversoes', aliases: ['conversoes', 'conversões', 'leads forms nativo', 'leads'] },
+      { id: 'gidConversoes', aliases: ['conversoes', 'conversões', 'leads'] },
       { id: 'gidAds', aliases: ['extracao gerenciador', 'extração gerenciador', 'meta ads', 'gerenciador'] }
     ];
 
