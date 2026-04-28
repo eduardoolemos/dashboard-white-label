@@ -3,19 +3,18 @@
 Use este padrao para reduzir configuracoes manuais no dashboard.
 
 Importante: este padrao foi pensado para **uma unica planilha Google** com varias abas.
-Os arquivos `.csv` desta pasta representam exemplos de conteudo de cada aba.
-Na pratica, voce deve criar as abas dentro da mesma planilha (nao planilhas separadas).
+Os arquivos `.csv` desta pasta representam exemplos de conteudo de cada aba dessa planilha unica.
+Na pratica, crie as abas com esses nomes dentro da mesma planilha.
 
 ## Abas recomendadas
 
 1. `CONVERSOES` (gid livre)
 2. `EXTRACAO GERENCIADOR` (gid livre)
-3. Etapas comerciais (uma aba por etapa):
-   - `Leads`
-   - `Reuniao Agendada`
-   - `Call Confirmada`
-   - `No-Show`
-   - `Call Feita`
+3. `Leads` (gid livre)
+4. `Reuniao Agendada` (gid livre)
+5. `Call Confirmada` (gid livre)
+6. `No-Show` (gid livre)
+7. `Call Feita` (gid livre)
 
 ## Colunas minimas por aba
 
@@ -37,7 +36,7 @@ Na pratica, voce deve criar as abas dentro da mesma planilha (nao planilhas sepa
 - `Action Link Clicks`
 - `Action Landing Page View`
 
-### Etapas comerciais (Leads, Reuniao Agendada, etc.)
+### Etapas comerciais (Leads, Reuniao Agendada, Call Confirmada, No-Show, Call Feita)
 - `Data`
 - `utm_campaign`
 - `utm_content`
@@ -46,7 +45,7 @@ Na pratica, voce deve criar as abas dentro da mesma planilha (nao planilhas sepa
 
 ## Fluxo recomendado no dashboard
 
-1. Clique em **Aplicar padrao da planilha**.
+1. Clique em **Aplicar padrao (planilha unica com abas)**.
 2. Clique em **Buscar GIDs automatico**.
 3. Abra **Configurar regras** e ajuste apenas o que variar por cliente.
 
