@@ -1048,14 +1048,15 @@ async function apiRequest(path, options = {}) {
 
 function applyRoleUi() {
   const isAdmin = getRole() === 'super_admin';
+  const isAuthenticated = Boolean(AUTH_USER);
   const adminPanel = document.getElementById('adminPanel');
   if (adminPanel) adminPanel.style.display = isAdmin ? 'block' : 'none';
 
   const tabPesquisa = document.querySelector('.tab[onclick="switchTab(\'pesquisa\')"]');
   const tabConfig = document.querySelector('.tab[onclick="switchTab(\'config\')"]');
   if (tabPesquisa) tabPesquisa.style.display = isAdmin ? '' : 'none';
-  if (tabConfig) tabConfig.style.display = isAdmin ? '' : 'none';
-  if (!isAdmin && (currentTab === 'config' || currentTab === 'pesquisa')) {
+  if (tabConfig) tabConfig.style.display = (!isAuthenticated || isAdmin) ? '' : 'none';
+  if (isAuthenticated && !isAdmin && (currentTab === 'config' || currentTab === 'pesquisa')) {
     switchTab('conversoes');
   }
 }
@@ -2043,7 +2044,8 @@ METRICS_EXPORT_BASE = METRICS_SHEET_ID ? `https://docs.google.com/spreadsheets/d
 
 // ── TAB ────────────────────────────────
 function switchTab(tab) {
-  if ((tab === 'config' || tab === 'pesquisa') && getRole() !== 'super_admin') {
+  const isAuthenticated = Boolean(AUTH_USER);
+  if ((tab === 'config' || tab === 'pesquisa') && isAuthenticated && getRole() !== 'super_admin') {
     tab = 'conversoes';
   }
   currentTab = tab;
