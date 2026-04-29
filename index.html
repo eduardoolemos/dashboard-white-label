@@ -715,6 +715,14 @@ tbody td { padding:11px 12px; font-size:13px; color:var(--text); }
         </select>
       </div>
       <div class="filter-row">
+        <span class="filter-label">Filtro comercial (UTM):</span>
+        <input class="text-filter" id="commercialContains" type="text" placeholder="Ex: [CAPTAÇÃO]" oninput="onCommercialFilterChange()">
+        <select class="camp-select" id="commercialPatternMode" onchange="onCommercialFilterChange()" style="min-width:120px;">
+          <option value="contains">Contém</option>
+          <option value="not_contains">Não contém</option>
+        </select>
+      </div>
+      <div class="filter-row">
         <span class="filter-label">Campanha:</span>
         <select class="camp-select" id="campSelect" onchange="onCampaignChange()">
           <option value="">Todas</option>
@@ -1177,6 +1185,8 @@ function applyConfigObject(c = {}) {
       defaultCampContains: String(f?.defaultCampContains || ''),
       defaultCampMode: normalizePatternMode(f?.defaultCampMode || 'contains'),
       defaultCampRules: normalizeCampaignPatternRules(f?.defaultCampRules || []),
+      defaultCommercialContains: String(f?.defaultCommercialContains || ''),
+      defaultCommercialMode: normalizePatternMode(f?.defaultCommercialMode || 'contains'),
       stageConfigs: Array.isArray(f?.stageConfigs) ? f.stageConfigs.map((s) => ({ name: String(s?.name || ''), gid: String(s?.gid || '') })) : DEFAULT_STAGE_CONFIGS.map((s) => ({ ...s }))
     }));
   }
@@ -1197,6 +1207,8 @@ function applyConfigObject(c = {}) {
       defaultCampContains: '',
       defaultCampMode: 'contains',
       defaultCampRules: [],
+      defaultCommercialContains: '',
+      defaultCommercialMode: 'contains',
       funnelType: 'sessao_estrategica',
       stageConfigs: STAGE_CONFIGS.map((s) => ({ ...s }))
     }];
@@ -1647,6 +1659,8 @@ try {
       defaultCampContains: String(f.defaultCampContains || ''),
       defaultCampMode: normalizePatternMode(f.defaultCampMode || 'contains'),
       defaultCampRules: normalizeCampaignPatternRules(f.defaultCampRules || []),
+      defaultCommercialContains: String(f.defaultCommercialContains || ''),
+      defaultCommercialMode: normalizePatternMode(f.defaultCommercialMode || 'contains'),
       stageConfigs: Array.isArray(f.stageConfigs) ? f.stageConfigs.map(s => ({
         name: String(s?.name || '').trim(),
         gid: String(s?.gid || '').trim()
@@ -1675,6 +1689,8 @@ if (!FUNNELS.length) {
     defaultCampContains: '',
     defaultCampMode: 'contains',
     defaultCampRules: [],
+    defaultCommercialContains: '',
+    defaultCommercialMode: 'contains',
     stageConfigs: STAGE_CONFIGS.map(s => ({ ...s }))
   }];
 }
@@ -1710,6 +1726,8 @@ let filterFrom = null, filterTo = null;
 let campaignContains = '';
 let campaignPatternMode = 'contains';
 let campaignPatternRules = [];
+let commercialContains = '';
+let commercialPatternMode = 'contains';
 let convDateFrom = null, convDateTo = null;
 
 function normalizePatternMode(mode) {
@@ -1733,6 +1751,18 @@ function buildEffectiveCampaignPatternRules() {
     base.push({ mode: normalizePatternMode(campaignPatternMode), value: primaryValue });
   }
   return base.concat(normalizeCampaignPatternRules(campaignPatternRules));
+}
+
+function buildCommercialPatternRules() {
+  const value = String(commercialContains || '').trim();
+  if (!value) return [];
+  return [{ mode: normalizePatternMode(commercialPatternMode), value }];
+}
+
+function matchesCommercialFilter(c, a, ad) {
+  const rules = buildCommercialPatternRules();
+  if (!rules.length) return true;
+  return matchesAllUtmPatterns(c, a, ad, rules);
 }
 
 function matchesPatternByMode(text, pattern, mode = 'contains') {
@@ -1963,6 +1993,8 @@ function buildSharePayload() {
       campaignContains,
       campaignPatternMode,
       normalizeCampaignPatternRules(campaignPatternRules),
+      commercialContains,
+      commercialPatternMode,
       Array.from(visibleMetrics || []),
       dailyValueMetric,
       dailyCostMetric,
@@ -1976,6 +2008,8 @@ try {
   campaignContains = (savedTraffic.campaignContains || '').trim();
   campaignPatternMode = normalizePatternMode(savedTraffic.campaignPatternMode || 'contains');
   campaignPatternRules = normalizeCampaignPatternRules(savedTraffic.campaignPatternRules || []);
+  commercialContains = String(savedTraffic.commercialContains || '').trim();
+  commercialPatternMode = normalizePatternMode(savedTraffic.commercialPatternMode || 'contains');
   if (Array.isArray(savedTraffic.visibleMetrics) && savedTraffic.visibleMetrics.length) {
     visibleMetrics = new Set(savedTraffic.visibleMetrics.map(v => String(v || '').trim()).filter(Boolean));
   }
@@ -2068,21 +2102,28 @@ try {
   }
   if (shared?.v === 2 && Array.isArray(shared?.t)) {
     const isOldTrafficShape = Array.isArray(shared.t[1]);
+    const isMidTrafficShape = !isOldTrafficShape && Array.isArray(shared.t[2]);
     const sharedPatternMode = isOldTrafficShape ? 'contains' : shared.t[1];
-    const sharedPatternRules = isOldTrafficShape ? [] : shared.t[2];
-    const sharedVisibleMetrics = isOldTrafficShape ? shared.t[1] : shared.t[3];
+    const sharedPatternRules = isOldTrafficShape ? [] : (isMidTrafficShape ? [] : shared.t[2]);
+    const sharedCommercialContains = isOldTrafficShape ? '' : (isMidTrafficShape ? shared.t[2] : shared.t[3]);
+    const sharedCommercialPatternMode = isOldTrafficShape ? 'contains' : (isMidTrafficShape ? shared.t[3] : shared.t[4]);
+    const sharedVisibleMetrics = isOldTrafficShape ? shared.t[1] : (isMidTrafficShape ? shared.t[4] : shared.t[5]);
     const t = {
       campaignContains: shared.t[0],
       campaignPatternMode: sharedPatternMode,
       campaignPatternRules: sharedPatternRules,
+      commercialContains: sharedCommercialContains,
+      commercialPatternMode: sharedCommercialPatternMode,
       visibleMetrics: sharedVisibleMetrics,
-      dailyValueMetric: isOldTrafficShape ? shared.t[2] : shared.t[4],
-      dailyCostMetric: isOldTrafficShape ? shared.t[3] : shared.t[5],
-      attributionMode: isOldTrafficShape ? shared.t[4] : shared.t[6]
+      dailyValueMetric: isOldTrafficShape ? shared.t[2] : (isMidTrafficShape ? shared.t[5] : shared.t[6]),
+      dailyCostMetric: isOldTrafficShape ? shared.t[3] : (isMidTrafficShape ? shared.t[6] : shared.t[7]),
+      attributionMode: isOldTrafficShape ? shared.t[4] : (isMidTrafficShape ? shared.t[7] : shared.t[8])
     };
     campaignContains = String(t.campaignContains || '').trim();
     campaignPatternMode = normalizePatternMode(t.campaignPatternMode || 'contains');
     campaignPatternRules = normalizeCampaignPatternRules(t.campaignPatternRules || []);
+    commercialContains = String(t.commercialContains || '').trim();
+    commercialPatternMode = normalizePatternMode(t.commercialPatternMode || 'contains');
     if (Array.isArray(t.visibleMetrics) && t.visibleMetrics.length) {
       visibleMetrics = new Set(t.visibleMetrics.map(v => String(v || '').trim()).filter(Boolean));
     }
@@ -2093,6 +2134,8 @@ try {
       campaignContains,
       campaignPatternMode,
       campaignPatternRules,
+      commercialContains,
+      commercialPatternMode,
       visibleMetrics: Array.from(visibleMetrics),
       dailyValueMetric,
       dailyCostMetric,
@@ -2138,6 +2181,8 @@ try {
     campaignContains = String(t.campaignContains || '').trim();
     campaignPatternMode = normalizePatternMode(t.campaignPatternMode || 'contains');
     campaignPatternRules = normalizeCampaignPatternRules(t.campaignPatternRules || []);
+    commercialContains = String(t.commercialContains || '').trim();
+    commercialPatternMode = normalizePatternMode(t.commercialPatternMode || 'contains');
     if (Array.isArray(t.visibleMetrics) && t.visibleMetrics.length) {
       visibleMetrics = new Set(t.visibleMetrics.map(v => String(v || '').trim()).filter(Boolean));
     }
@@ -2148,6 +2193,8 @@ try {
       campaignContains,
       campaignPatternMode,
       campaignPatternRules,
+      commercialContains,
+      commercialPatternMode,
       visibleMetrics: Array.from(visibleMetrics),
       dailyValueMetric,
       dailyCostMetric,
@@ -2194,6 +2241,8 @@ function applyActiveFunnelToGlobals() {
   campaignContains = String(f.defaultCampContains || '');
   campaignPatternMode = normalizePatternMode(f.defaultCampMode || 'contains');
   campaignPatternRules = normalizeCampaignPatternRules(f.defaultCampRules || []);
+  commercialContains = String(f.defaultCommercialContains || '');
+  commercialPatternMode = normalizePatternMode(f.defaultCommercialMode || 'contains');
   STAGE_CONFIGS = (f.stageConfigs || DEFAULT_STAGE_CONFIGS).map(s => ({ ...s }));
 }
 
@@ -2210,6 +2259,8 @@ function syncGlobalsToActiveFunnel() {
     defaultCampContains: String(campaignContains || ''),
     defaultCampMode: normalizePatternMode(campaignPatternMode),
     defaultCampRules: normalizeCampaignPatternRules(campaignPatternRules),
+    defaultCommercialContains: String(commercialContains || ''),
+    defaultCommercialMode: normalizePatternMode(commercialPatternMode),
     stageConfigs: STAGE_CONFIGS.map(s => ({ ...s }))
   };
 }
@@ -2254,6 +2305,10 @@ function fillConfigInputsFromGlobals() {
   document.getElementById('campContains').value = campaignContains;
   const campPatternModeSel = document.getElementById('campPatternMode');
   if (campPatternModeSel) campPatternModeSel.value = campaignPatternMode;
+  const commercialInp = document.getElementById('commercialContains');
+  if (commercialInp) commercialInp.value = commercialContains;
+  const commercialModeSel = document.getElementById('commercialPatternMode');
+  if (commercialModeSel) commercialModeSel.value = commercialPatternMode;
   renderCampaignPatternRulesConfig();
   const ids = [
     ['lead', 'Lead'],
@@ -2864,6 +2919,8 @@ function addFunnelPage() {
     defaultCampContains: '',
     defaultCampMode: 'contains',
     defaultCampRules: [],
+    defaultCommercialContains: '',
+    defaultCommercialMode: 'contains',
     stageConfigs: DEFAULT_STAGE_CONFIGS.map(s => ({ ...s }))
   });
   activeFunnelId = id;
@@ -4249,6 +4306,8 @@ function onDailyMetricChange() {
       campaignContains,
       campaignPatternMode,
       campaignPatternRules,
+      commercialContains,
+      commercialPatternMode,
       visibleMetrics: Array.from(visibleMetrics),
       dailyValueMetric,
       dailyCostMetric,
@@ -4432,6 +4491,8 @@ function setAttributionMode(mode) {
       campaignContains,
       campaignPatternMode,
       campaignPatternRules,
+      commercialContains,
+      commercialPatternMode,
       visibleMetrics: Array.from(visibleMetrics),
       dailyValueMetric,
       dailyCostMetric,
@@ -4473,6 +4534,11 @@ function renderTopLeadBlocks(adsRows) {
         if (!rowMatchesMetricRule(r, rule)) return;
         const utmVal = getLevelConvKey(r);
         if (!utmVal || utmVal === '-' || utmVal.startsWith('{{')) return;
+        const c = getLeadUtmCampaign(r);
+        const a = getLeadUtmContent(r);
+        const ad = getLeadUtmTerm(r);
+        const hasAnyUtm = hasAttributionValue(c) || hasAttributionValue(a) || hasAttributionValue(ad);
+        if (hasAnyUtm && !matchesCommercialFilter(c, a, ad)) return;
         if (rowDateCol) {
           const d = parseDate(r[rowDateCol]);
           if (d && !inPeriod(d)) return;
@@ -4498,6 +4564,11 @@ function renderTopLeadBlocks(adsRows) {
       if (!isLeadRow(r)) return;
       const utmVal = getLevelConvKey(r);
       if (!utmVal || utmVal === '-' || utmVal.startsWith('{{')) return;
+      const c = getLeadUtmCampaign(r);
+      const a = getLeadUtmContent(r);
+      const ad = getLeadUtmTerm(r);
+      const hasAnyUtm = hasAttributionValue(c) || hasAttributionValue(a) || hasAttributionValue(ad);
+      if (hasAnyUtm && !matchesCommercialFilter(c, a, ad)) return;
       if (dateCol) {
         const d = parseDate(r[dateCol]);
         if (d && !inPeriod(d)) return;
@@ -4601,6 +4672,8 @@ function onCampaignContainsChange() {
       campaignContains,
       campaignPatternMode,
       campaignPatternRules,
+      commercialContains,
+      commercialPatternMode,
       visibleMetrics: Array.from(visibleMetrics),
       dailyValueMetric,
       dailyCostMetric,
@@ -4620,6 +4693,27 @@ function onCampaignContainsChange() {
   renderTrafego();
 }
 
+function onCommercialFilterChange() {
+  commercialContains = (document.getElementById('commercialContains')?.value || '').trim();
+  commercialPatternMode = normalizePatternMode(document.getElementById('commercialPatternMode')?.value || commercialPatternMode);
+  try {
+    localStorage.setItem(getTrafficKey(), JSON.stringify({
+      campaignContains,
+      campaignPatternMode,
+      campaignPatternRules,
+      commercialContains,
+      commercialPatternMode,
+      visibleMetrics: Array.from(visibleMetrics),
+      dailyValueMetric,
+      dailyCostMetric,
+      attributionMode
+    }));
+  } catch {}
+  syncGlobalsToActiveFunnel();
+  persistConfigState();
+  renderTrafego();
+}
+
 function isMetricVisible(metric) {
   return visibleMetrics.has(metric);
 }
@@ -4632,6 +4726,8 @@ function ensureVisibleMetricsNotEmpty() {
       campaignContains,
       campaignPatternMode,
       campaignPatternRules,
+      commercialContains,
+      commercialPatternMode,
       visibleMetrics: Array.from(visibleMetrics),
       dailyValueMetric,
       dailyCostMetric,
@@ -4674,6 +4770,8 @@ function onVisibleMetricsChange() {
       campaignContains,
       campaignPatternMode,
       campaignPatternRules,
+      commercialContains,
+      commercialPatternMode,
       visibleMetrics: Array.from(visibleMetrics),
       dailyValueMetric,
       dailyCostMetric,
@@ -4698,6 +4796,8 @@ function selectAllVisibleMetrics(event) {
       campaignContains,
       campaignPatternMode,
       campaignPatternRules,
+      commercialContains,
+      commercialPatternMode,
       visibleMetrics: Array.from(visibleMetrics),
       dailyValueMetric,
       dailyCostMetric,
@@ -4778,6 +4878,7 @@ function renderTrafego() {
   const campPattern = (document.getElementById('campContains')?.value || campaignContains || '').trim();
   const campPatternModeValue = normalizePatternMode(document.getElementById('campPatternMode')?.value || campaignPatternMode);
   const campPatternRules = buildEffectiveCampaignPatternRules();
+  const commercialPatternRules = buildCommercialPatternRules();
 
   // Filtro principal de Ads
   let adsRows = RAW.ads.filter(r => {
@@ -4823,21 +4924,21 @@ function renderTrafego() {
   const cpm = imp    > 0 ? spend  / imp * 1000 : 0;
   const cpc = clicks > 0 ? spend  / clicks     : 0;
 
-  const { leads, mql } = getTrafficLeadStats({ fCamp, fAdset, fAd, campPattern, campPatternMode: campPatternModeValue, campPatternRules });
+  const { leads, mql } = getTrafficLeadStats({ fCamp, fAdset, fAd, campPattern, campPatternMode: campPatternModeValue, campPatternRules: commercialPatternRules });
 
   // CPL = verba gasta no período ÷ leads convertidos no período
   const cpl      = leads > 0 && spend > 0 ? spend / leads : 0;
   const cpmql    = mql > 0 && spend > 0 ? spend / mql : 0;
   const convRate = clicks > 0 && leads > 0 ? leads / clicks * 100 : 0;
-  const agendadas = countStageInPeriod(getRowsForMetricKey('agendada'), { fCamp, fAdset, fAd, campPattern, campPatternMode: campPatternModeValue, campPatternRules }, 'agendada');
-  const confirmadas = countStageInPeriod(getRowsForMetricKey('confirmada'), { fCamp, fAdset, fAd, campPattern, campPatternMode: campPatternModeValue, campPatternRules }, 'confirmada');
-  const callFeita = countStageInPeriod(getRowsForMetricKey('callFeita'), { fCamp, fAdset, fAd, campPattern, campPatternMode: campPatternModeValue, campPatternRules }, 'callFeita');
+  const agendadas = countStageInPeriod(getRowsForMetricKey('agendada'), { fCamp, fAdset, fAd, campPattern, campPatternMode: campPatternModeValue, campPatternRules: commercialPatternRules }, 'agendada');
+  const confirmadas = countStageInPeriod(getRowsForMetricKey('confirmada'), { fCamp, fAdset, fAd, campPattern, campPatternMode: campPatternModeValue, campPatternRules: commercialPatternRules }, 'confirmada');
+  const callFeita = countStageInPeriod(getRowsForMetricKey('callFeita'), { fCamp, fAdset, fAd, campPattern, campPatternMode: campPatternModeValue, campPatternRules: commercialPatternRules }, 'callFeita');
   const txQualificacao = leads > 0 && mql > 0 ? (mql / leads * 100) : 0;
   const txMqlToContato = mql > 0 && agendadas > 0 ? (agendadas / mql * 100) : 0;
   const txContatoToConfirmada = agendadas > 0 && confirmadas > 0 ? (confirmadas / agendadas * 100) : 0;
   const txConfirmadaToCallFeita = confirmadas > 0 && callFeita > 0 ? (callFeita / confirmadas * 100) : 0;
   const connectRate = clicks > 0 && lpv > 0 ? (lpv / clicks * 100) : 0;
-  const noShow = countStageInPeriod(getRowsForMetricKey('noShow'), { fCamp, fAdset, fAd, campPattern, campPatternMode: campPatternModeValue, campPatternRules }, 'noShow');
+  const noShow = countStageInPeriod(getRowsForMetricKey('noShow'), { fCamp, fAdset, fAd, campPattern, campPatternMode: campPatternModeValue, campPatternRules: commercialPatternRules }, 'noShow');
   const txNoShow = confirmadas > 0 && noShow > 0 ? (noShow / confirmadas * 100) : 0;
   const custoContato = agendadas > 0 && spend > 0 ? spend / agendadas : 0;
   const custoConfirmada = confirmadas > 0 && spend > 0 ? spend / confirmadas : 0;
@@ -4940,7 +5041,7 @@ function renderTrafego() {
         const a = getLeadUtmContent(r);
         const ad = getLeadUtmTerm(r);
         const hasAnyUtm = hasAttributionValue(c) || hasAttributionValue(a) || hasAttributionValue(ad);
-        if (campPatternRules.length && hasAnyUtm && !matchesAllUtmPatterns(c, a, ad, campPatternRules)) return;
+        if (commercialPatternRules.length && hasAnyUtm && !matchesAllUtmPatterns(c, a, ad, commercialPatternRules)) return;
         if (fCamp && hasAnyUtm && !matchesAnyUtmExact(c, a, ad, fCamp)) return;
         if (fAdset && hasAnyUtm && !matchesAnyUtmExact(c, a, ad, fAdset)) return;
         if (fAd && hasAnyUtm && !matchesAnyUtmExact(c, a, ad, fAd)) return;
@@ -5254,6 +5355,8 @@ document.getElementById('tenantKey').value     = CLIENT_KEY;
 document.getElementById('brandNameInput').value = BRAND_NAME;
 document.getElementById('campContains').value  = campaignContains;
 document.getElementById('campPatternMode').value = campaignPatternMode;
+document.getElementById('commercialContains').value = commercialContains;
+document.getElementById('commercialPatternMode').value = commercialPatternMode;
 document.getElementById('defaultCampMode').value = campaignPatternMode;
 document.getElementById('perfSortMetric').value = perfSortMetric;
 document.getElementById('topSortMetric').value = topSortMetric;
