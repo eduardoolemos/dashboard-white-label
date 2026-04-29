@@ -5017,6 +5017,7 @@ function renderTrafego() {
 
   const primaryHtml = funnelType === 'isca_vendas' ? primaryHtmlSalesLeadMagnet : primaryHtmlStrategic;
   document.getElementById('kpiTrafego').innerHTML = kpiMode === 'secondary' ? secondaryHtml : primaryHtml;
+  applyMetricAvailabilityToKpiCards();
 
   // Charts diários
   const byDaySpend = {};
@@ -5163,6 +5164,42 @@ function renderTrafego() {
   const lvlNames = { campaign:'campanha', adset:'conjunto', ad:'anúncio' };
   document.getElementById('perfSub').textContent =
     `Desempenho por ${lvlNames[currentLevel]} · ${onlyLeads ? 'apenas com leads' : 'todos'}`;
+}
+
+function applyMetricAvailabilityToKpiCards() {
+  const grid = document.getElementById('kpiTrafego');
+  if (!grid) return;
+  const cards = Array.from(grid.querySelectorAll('.kpi-card'));
+  if (!cards.length) return;
+
+  const metricEnabled = (key) => (METRIC_RULES?.[key]?.available !== false);
+  const rules = [
+    { key: 'lead', labels: ['leads captados', 'custo por lead', 'taxa qualificacao'] },
+    { key: 'mql', labels: ['mql', 'cpmql', 'tx mql → contato'] },
+    { key: 'agendada', labels: ['reuniao agendada', 'custo agendada', 'tx contato → confirmada'] },
+    { key: 'confirmada', labels: ['reuniao confirmada', 'custo confirmada', 'tx confirmada → call feita'] },
+    { key: 'noShow', labels: ['no-show', 'custo no-show', 'tx no-show'] },
+    { key: 'callFeita', labels: ['call feita', 'custo call feita', 'tx call feita'] }
+  ];
+
+  const shouldHideByLabel = (labelText, metricKey) => {
+    const rule = rules.find((r) => r.key === metricKey);
+    if (!rule) return false;
+    const normalized = normalizeName(labelText || '');
+    return rule.labels.some((needle) => normalized.includes(normalizeName(needle)));
+  };
+
+  cards.forEach((card) => {
+    const labelText = card.querySelector('.kpi-label')?.textContent || '';
+    const hide =
+      (!metricEnabled('lead') && shouldHideByLabel(labelText, 'lead')) ||
+      (!metricEnabled('mql') && shouldHideByLabel(labelText, 'mql')) ||
+      (!metricEnabled('agendada') && shouldHideByLabel(labelText, 'agendada')) ||
+      (!metricEnabled('confirmada') && shouldHideByLabel(labelText, 'confirmada')) ||
+      (!metricEnabled('noShow') && shouldHideByLabel(labelText, 'noShow')) ||
+      (!metricEnabled('callFeita') && shouldHideByLabel(labelText, 'callFeita'));
+    card.style.display = hide ? 'none' : '';
+  });
 }
 
 // ── TABELA DE DESEMPENHO ──────────────────────────────────────────────
