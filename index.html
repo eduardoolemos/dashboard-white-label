@@ -4109,9 +4109,12 @@ function getTrafficLeadStats(filters = {}) {
   const mqlRows = getRowsForMetricKey('mql');
   const leadDateCol = getTrafficLeadDateCol(leadRows);
   const mqlDateCol = getTrafficLeadDateCol(mqlRows);
-  const patternRules = normalizeCampaignPatternRules(filters.campPatternRules && filters.campPatternRules.length
-    ? filters.campPatternRules
-    : (filters.campPattern ? [{ mode: filters.campPatternMode || 'contains', value: filters.campPattern }] : []));
+  const hasExplicitPatternRules = Object.prototype.hasOwnProperty.call(filters, 'campPatternRules');
+  const patternRules = hasExplicitPatternRules
+    ? normalizeCampaignPatternRules(filters.campPatternRules || [])
+    : normalizeCampaignPatternRules(
+        filters.campPattern ? [{ mode: filters.campPatternMode || 'contains', value: filters.campPattern }] : []
+      );
   let leads = 0, mql = 0;
   leadRows.forEach(r => {
     if (!rowMatchesMetricRule(r, METRIC_RULES.lead)) return;
@@ -4190,9 +4193,12 @@ function countStageInPeriod(rows, filters, metricKey = 'lead') {
   if (!rows.length) return 0;
   const dateCol = getTrafficLeadDateCol(rows);
   const rule = METRIC_RULES[metricKey] || DEFAULT_METRIC_RULES.lead;
-  const patternRules = normalizeCampaignPatternRules(filters?.campPatternRules && filters.campPatternRules.length
-    ? filters.campPatternRules
-    : (filters?.campPattern ? [{ mode: filters?.campPatternMode || 'contains', value: filters.campPattern }] : []));
+  const hasExplicitPatternRules = Object.prototype.hasOwnProperty.call(filters || {}, 'campPatternRules');
+  const patternRules = hasExplicitPatternRules
+    ? normalizeCampaignPatternRules(filters?.campPatternRules || [])
+    : normalizeCampaignPatternRules(
+        filters?.campPattern ? [{ mode: filters?.campPatternMode || 'contains', value: filters.campPattern }] : []
+      );
   let count = 0;
   rows.forEach(r => {
     if (!rowMatchesMetricRule(r, rule)) return;
