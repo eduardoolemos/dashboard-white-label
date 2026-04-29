@@ -462,6 +462,16 @@ tbody td { padding:11px 12px; font-size:13px; color:var(--text); }
       <div class="config-field">
         <label>Filtro padrão: nome da campanha contém</label>
         <input type="text" id="defaultCampContains" placeholder="Ex: dia-das-maes" oninput="onDefaultCampaignPatternChange(this.value)">
+        <select class="camp-select" id="defaultCampMode" onchange="onDefaultCampaignModeChange(this.value)" style="margin-top:8px;">
+          <option value="contains">Contém</option>
+          <option value="not_contains">Não contém</option>
+        </select>
+        <div class="stage-config-wrap" style="margin-top:10px;padding-top:10px;">
+          <div class="stage-config-title">Filtros adicionais de campanha</div>
+          <div class="config-hint" style="margin-bottom:8px;">Todas as regras precisam ser verdadeiras.</div>
+          <div id="campaignPatternRulesConfig"></div>
+          <button type="button" class="btn-stage-add" onclick="addCampaignPatternRule()">+ Adicionar filtro</button>
+        </div>
         <div class="config-hint">Este valor será aplicado automaticamente quando esta página/funil estiver ativa.</div>
       </div>
       <div class="stage-config-wrap">
@@ -627,7 +637,7 @@ tbody td { padding:11px 12px; font-size:13px; color:var(--text); }
     <div class="grid-2" style="margin-bottom:16px;">
       <div class="card">
         <div class="card-title">Top Ads de Qualificação</div>
-        <div class="card-sub">Lojista + faturamento >= 20 mil</div>
+        <div class="card-sub">Conforme regras de qualificação configuradas</div>
         <div class="table-wrap">
           <table>
             <thead><tr><th>Anúncio</th><th>Qualificados</th><th>%</th></tr></thead>
@@ -637,7 +647,7 @@ tbody td { padding:11px 12px; font-size:13px; color:var(--text); }
       </div>
       <div class="card">
         <div class="card-title">Top Públicos de Qualificação</div>
-        <div class="card-sub">Lojista + faturamento >= 20 mil</div>
+        <div class="card-sub">Conforme regras de qualificação configuradas</div>
         <div class="table-wrap">
           <table>
             <thead><tr><th>Público (Conjunto)</th><th>Qualificados</th><th>%</th></tr></thead>
@@ -699,6 +709,10 @@ tbody td { padding:11px 12px; font-size:13px; color:var(--text); }
       <div class="filter-row">
         <span class="filter-label">Padrão campanha:</span>
         <input class="text-filter" id="campContains" type="text" placeholder="Ex: wh-captacao" oninput="onCampaignContainsChange()">
+        <select class="camp-select" id="campPatternMode" onchange="onCampaignContainsChange()" style="min-width:120px;">
+          <option value="contains">Contém</option>
+          <option value="not_contains">Não contém</option>
+        </select>
       </div>
       <div class="filter-row">
         <span class="filter-label">Campanha:</span>
@@ -1161,6 +1175,8 @@ function applyConfigObject(c = {}) {
       gidAds: String(f?.gidAds || ''),
       funnelType: String(f?.funnelType || 'sessao_estrategica'),
       defaultCampContains: String(f?.defaultCampContains || ''),
+      defaultCampMode: normalizePatternMode(f?.defaultCampMode || 'contains'),
+      defaultCampRules: normalizeCampaignPatternRules(f?.defaultCampRules || []),
       stageConfigs: Array.isArray(f?.stageConfigs) ? f.stageConfigs.map((s) => ({ name: String(s?.name || ''), gid: String(s?.gid || '') })) : DEFAULT_STAGE_CONFIGS.map((s) => ({ ...s }))
     }));
   }
@@ -1179,6 +1195,8 @@ function applyConfigObject(c = {}) {
       gidConv: GID_CONV,
       gidAds: GID_ADS,
       defaultCampContains: '',
+      defaultCampMode: 'contains',
+      defaultCampRules: [],
       funnelType: 'sessao_estrategica',
       stageConfigs: STAGE_CONFIGS.map((s) => ({ ...s }))
     }];
@@ -1627,6 +1645,8 @@ try {
       gidAds: String(f.gidAds || ''),
       funnelType: String(f.funnelType || 'sessao_estrategica'),
       defaultCampContains: String(f.defaultCampContains || ''),
+      defaultCampMode: normalizePatternMode(f.defaultCampMode || 'contains'),
+      defaultCampRules: normalizeCampaignPatternRules(f.defaultCampRules || []),
       stageConfigs: Array.isArray(f.stageConfigs) ? f.stageConfigs.map(s => ({
         name: String(s?.name || '').trim(),
         gid: String(s?.gid || '').trim()
@@ -1653,6 +1673,8 @@ if (!FUNNELS.length) {
     gidAds: GID_ADS,
     funnelType: 'sessao_estrategica',
     defaultCampContains: '',
+    defaultCampMode: 'contains',
+    defaultCampRules: [],
     stageConfigs: STAGE_CONFIGS.map(s => ({ ...s }))
   }];
 }
@@ -1686,7 +1708,48 @@ let RAW = { etapas:[], conv:[], ads:[], stages:{} };
 let RAW_CONV_VIEW = [];
 let filterFrom = null, filterTo = null;
 let campaignContains = '';
+let campaignPatternMode = 'contains';
+let campaignPatternRules = [];
 let convDateFrom = null, convDateTo = null;
+
+function normalizePatternMode(mode) {
+  return mode === 'not_contains' ? 'not_contains' : 'contains';
+}
+
+function normalizeCampaignPatternRules(raw, keepEmpty = false) {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map((r) => ({
+      mode: normalizePatternMode(r?.mode || 'contains'),
+      value: String(r?.value || '').trim()
+    }))
+    .filter((r) => keepEmpty || r.value);
+}
+
+function buildEffectiveCampaignPatternRules() {
+  const base = [];
+  const primaryValue = String(campaignContains || '').trim();
+  if (primaryValue) {
+    base.push({ mode: normalizePatternMode(campaignPatternMode), value: primaryValue });
+  }
+  return base.concat(normalizeCampaignPatternRules(campaignPatternRules));
+}
+
+function matchesPatternByMode(text, pattern, mode = 'contains') {
+  const value = normKey(text);
+  const p = normKey(pattern);
+  if (!p) return true;
+  if (normalizePatternMode(mode) === 'not_contains') {
+    return !value.includes(p);
+  }
+  return value.includes(p);
+}
+
+function matchesAllCampaignPatterns(text, rules = []) {
+  const safeRules = normalizeCampaignPatternRules(rules);
+  if (!safeRules.length) return true;
+  return safeRules.every((r) => matchesPatternByMode(text, r.value, r.mode));
+}
 
 function encodeShareCfg(payload) {
   try {
@@ -1826,6 +1889,7 @@ function buildSharePayload() {
     String(f?.gidConv || ''),
     String(f?.gidAds || ''),
     String(f?.defaultCampContains || ''),
+    String(normalizePatternMode(f?.defaultCampMode || 'contains')),
     packStages(f?.stageConfigs || []),
     String(f?.funnelType || 'sessao_estrategica')
   ]));
@@ -1897,6 +1961,8 @@ function buildSharePayload() {
     ],
     t: [
       campaignContains,
+      campaignPatternMode,
+      normalizeCampaignPatternRules(campaignPatternRules),
       Array.from(visibleMetrics || []),
       dailyValueMetric,
       dailyCostMetric,
@@ -1908,6 +1974,8 @@ function buildSharePayload() {
 try {
   const savedTraffic = JSON.parse(localStorage.getItem(getTrafficKey()) || '{}');
   campaignContains = (savedTraffic.campaignContains || '').trim();
+  campaignPatternMode = normalizePatternMode(savedTraffic.campaignPatternMode || 'contains');
+  campaignPatternRules = normalizeCampaignPatternRules(savedTraffic.campaignPatternRules || []);
   if (Array.isArray(savedTraffic.visibleMetrics) && savedTraffic.visibleMetrics.length) {
     visibleMetrics = new Set(savedTraffic.visibleMetrics.map(v => String(v || '').trim()).filter(Boolean));
   }
@@ -1923,14 +1991,26 @@ try {
     gid: String(s?.[1] || '').trim()
   }));
   const unpackFunnels = (arr) => (arr || []).map((f, i) => ({
+    // Compatibilidade: formato antigo [.., defaultCampContains, stageConfigs, funnelType]
+    // formato novo      [.., defaultCampContains, defaultCampMode, stageConfigs, funnelType]
     id: String(f?.[0] || `funnel_${i+1}`),
     name: String(f?.[1] || `Página ${i+1}`),
     gidEtapas: String(f?.[2] || ''),
     gidConv: String(f?.[3] || ''),
     gidAds: String(f?.[4] || ''),
     defaultCampContains: String(f?.[5] || ''),
-    stageConfigs: Array.isArray(f?.[6]) ? unpackStages(f[6]) : DEFAULT_STAGE_CONFIGS.map(s => ({ ...s })),
-    funnelType: String(f?.[7] || 'sessao_estrategica')
+    defaultCampMode: Array.isArray(f?.[6]) ? 'contains' : normalizePatternMode(f?.[6] || 'contains'),
+    defaultCampRules: Array.isArray(f?.[6])
+      ? []
+      : normalizeCampaignPatternRules(Array.isArray(f?.[7]) && f[7]?.[0] && typeof f[7][0] === 'object' ? f[7] : []),
+    stageConfigs: Array.isArray(f?.[6])
+      ? unpackStages(f[6])
+      : (Array.isArray(f?.[7]) && (!f[7]?.[0] || Array.isArray(f[7][0]))
+          ? unpackStages(f[7])
+          : (Array.isArray(f?.[8]) ? unpackStages(f[8]) : DEFAULT_STAGE_CONFIGS.map(s => ({ ...s })))),
+    funnelType: Array.isArray(f?.[6])
+      ? String(f?.[7] || 'sessao_estrategica')
+      : String((Array.isArray(f?.[7]) && (!f[7]?.[0] || Array.isArray(f[7][0]))) ? f?.[8] : f?.[9] || 'sessao_estrategica')
   }));
 
   if (shared?.v === 2 && Array.isArray(shared?.c)) {
@@ -1987,14 +2067,22 @@ try {
     }));
   }
   if (shared?.v === 2 && Array.isArray(shared?.t)) {
+    const isOldTrafficShape = Array.isArray(shared.t[1]);
+    const sharedPatternMode = isOldTrafficShape ? 'contains' : shared.t[1];
+    const sharedPatternRules = isOldTrafficShape ? [] : shared.t[2];
+    const sharedVisibleMetrics = isOldTrafficShape ? shared.t[1] : shared.t[3];
     const t = {
       campaignContains: shared.t[0],
-      visibleMetrics: shared.t[1],
-      dailyValueMetric: shared.t[2],
-      dailyCostMetric: shared.t[3],
-      attributionMode: shared.t[4]
+      campaignPatternMode: sharedPatternMode,
+      campaignPatternRules: sharedPatternRules,
+      visibleMetrics: sharedVisibleMetrics,
+      dailyValueMetric: isOldTrafficShape ? shared.t[2] : shared.t[4],
+      dailyCostMetric: isOldTrafficShape ? shared.t[3] : shared.t[5],
+      attributionMode: isOldTrafficShape ? shared.t[4] : shared.t[6]
     };
     campaignContains = String(t.campaignContains || '').trim();
+    campaignPatternMode = normalizePatternMode(t.campaignPatternMode || 'contains');
+    campaignPatternRules = normalizeCampaignPatternRules(t.campaignPatternRules || []);
     if (Array.isArray(t.visibleMetrics) && t.visibleMetrics.length) {
       visibleMetrics = new Set(t.visibleMetrics.map(v => String(v || '').trim()).filter(Boolean));
     }
@@ -2003,6 +2091,8 @@ try {
     if (t.attributionMode === 'paid') attributionMode = 'paid';
     localStorage.setItem(getTrafficKey(), JSON.stringify({
       campaignContains,
+      campaignPatternMode,
+      campaignPatternRules,
       visibleMetrics: Array.from(visibleMetrics),
       dailyValueMetric,
       dailyCostMetric,
@@ -2033,6 +2123,7 @@ try {
         gidAds: String(f.gidAds || ''),
         funnelType: String(f.funnelType || 'sessao_estrategica'),
         defaultCampContains: String(f.defaultCampContains || ''),
+        defaultCampMode: normalizePatternMode(f.defaultCampMode || 'contains'),
         stageConfigs: Array.isArray(f.stageConfigs) ? f.stageConfigs.map(s => ({
           name: String(s?.name || '').trim(),
           gid: String(s?.gid || '').trim()
@@ -2045,6 +2136,8 @@ try {
   if (shared?.traffic) {
     const t = shared.traffic;
     campaignContains = String(t.campaignContains || '').trim();
+    campaignPatternMode = normalizePatternMode(t.campaignPatternMode || 'contains');
+    campaignPatternRules = normalizeCampaignPatternRules(t.campaignPatternRules || []);
     if (Array.isArray(t.visibleMetrics) && t.visibleMetrics.length) {
       visibleMetrics = new Set(t.visibleMetrics.map(v => String(v || '').trim()).filter(Boolean));
     }
@@ -2053,6 +2146,8 @@ try {
     if (t.attributionMode === 'paid') attributionMode = 'paid';
     localStorage.setItem(getTrafficKey(), JSON.stringify({
       campaignContains,
+      campaignPatternMode,
+      campaignPatternRules,
       visibleMetrics: Array.from(visibleMetrics),
       dailyValueMetric,
       dailyCostMetric,
@@ -2097,6 +2192,8 @@ function applyActiveFunnelToGlobals() {
   GID_CONV = String(f.gidConv || '');
   GID_ADS = String(f.gidAds || '');
   campaignContains = String(f.defaultCampContains || '');
+  campaignPatternMode = normalizePatternMode(f.defaultCampMode || 'contains');
+  campaignPatternRules = normalizeCampaignPatternRules(f.defaultCampRules || []);
   STAGE_CONFIGS = (f.stageConfigs || DEFAULT_STAGE_CONFIGS).map(s => ({ ...s }));
 }
 
@@ -2111,6 +2208,8 @@ function syncGlobalsToActiveFunnel() {
     gidAds: String(GID_ADS || ''),
     funnelType,
     defaultCampContains: String(campaignContains || ''),
+    defaultCampMode: normalizePatternMode(campaignPatternMode),
+    defaultCampRules: normalizeCampaignPatternRules(campaignPatternRules),
     stageConfigs: STAGE_CONFIGS.map(s => ({ ...s }))
   };
 }
@@ -2150,7 +2249,12 @@ function fillConfigInputsFromGlobals() {
   document.getElementById('gidConversoes').value = GID_CONV;
   document.getElementById('gidAds').value = GID_ADS;
   document.getElementById('defaultCampContains').value = campaignContains;
+  const defaultCampModeSel = document.getElementById('defaultCampMode');
+  if (defaultCampModeSel) defaultCampModeSel.value = campaignPatternMode;
   document.getElementById('campContains').value = campaignContains;
+  const campPatternModeSel = document.getElementById('campPatternMode');
+  if (campPatternModeSel) campPatternModeSel.value = campaignPatternMode;
+  renderCampaignPatternRulesConfig();
   const ids = [
     ['lead', 'Lead'],
     ['mql', 'Mql'],
@@ -2652,6 +2756,66 @@ function onDefaultCampaignPatternChange(value) {
   persistConfigState();
 }
 
+function onDefaultCampaignModeChange(value) {
+  campaignPatternMode = normalizePatternMode(value);
+  const modeSel = document.getElementById('campPatternMode');
+  if (modeSel) modeSel.value = campaignPatternMode;
+  syncGlobalsToActiveFunnel();
+  persistConfigState();
+}
+
+function renderCampaignPatternRulesConfig() {
+  const host = document.getElementById('campaignPatternRulesConfig');
+  if (!host) return;
+  const rules = normalizeCampaignPatternRules(campaignPatternRules, true);
+  campaignPatternRules = rules;
+  if (!rules.length) {
+    host.innerHTML = '<div class="config-hint" style="margin:4px 0 8px;">Nenhum filtro adicional.</div>';
+    return;
+  }
+  host.innerHTML = rules.map((r, idx) => `
+    <div class="funnel-row" style="margin-bottom:8px;">
+      <select class="camp-select" onchange="onCampaignPatternRuleChange(${idx}, 'mode', this.value)">
+        <option value="contains" ${r.mode === 'contains' ? 'selected' : ''}>Contém</option>
+        <option value="not_contains" ${r.mode === 'not_contains' ? 'selected' : ''}>Não contém</option>
+      </select>
+      <input class="funnel-input" type="text" value="${String(r.value || '').replace(/"/g, '&quot;')}" placeholder="Ex: remarketing" onchange="onCampaignPatternRuleChange(${idx}, 'value', this.value)">
+      <button class="btn-stage-remove" type="button" onclick="removeCampaignPatternRule(${idx})">Excluir</button>
+    </div>
+  `).join('');
+}
+
+function addCampaignPatternRule() {
+  campaignPatternRules = normalizeCampaignPatternRules(campaignPatternRules, true);
+  campaignPatternRules.push({ mode: 'contains', value: '' });
+  renderCampaignPatternRulesConfig();
+  syncGlobalsToActiveFunnel();
+  persistConfigState();
+}
+
+function removeCampaignPatternRule(index) {
+  campaignPatternRules = normalizeCampaignPatternRules(campaignPatternRules, true);
+  campaignPatternRules.splice(index, 1);
+  renderCampaignPatternRulesConfig();
+  syncGlobalsToActiveFunnel();
+  persistConfigState();
+  rebuildAllFilters();
+  renderTrafego();
+}
+
+function onCampaignPatternRuleChange(index, field, value) {
+  campaignPatternRules = normalizeCampaignPatternRules(campaignPatternRules, true);
+  if (!Array.isArray(campaignPatternRules) || !campaignPatternRules[index]) return;
+  if (field === 'mode') campaignPatternRules[index].mode = normalizePatternMode(value);
+  if (field === 'value') campaignPatternRules[index].value = String(value || '').trim();
+  campaignPatternRules = normalizeCampaignPatternRules(campaignPatternRules, true);
+  renderCampaignPatternRulesConfig();
+  syncGlobalsToActiveFunnel();
+  persistConfigState();
+  rebuildAllFilters();
+  renderTrafego();
+}
+
 function onFunnelTypeChange(value) {
   const next = String(value || 'sessao_estrategica');
   const idx = FUNNELS.findIndex(f => f.id === activeFunnelId);
@@ -2698,6 +2862,8 @@ function addFunnelPage() {
     gidAds: '',
     funnelType: 'sessao_estrategica',
     defaultCampContains: '',
+    defaultCampMode: 'contains',
+    defaultCampRules: [],
     stageConfigs: DEFAULT_STAGE_CONFIGS.map(s => ({ ...s }))
   });
   activeFunnelId = id;
@@ -3835,9 +4001,20 @@ function normUtm(v) {
 }
 
 function matchesAnyUtmPattern(c, a, ad, pattern) {
+  return matchesAnyUtmPatternWithMode(c, a, ad, pattern, 'contains');
+}
+
+function matchesAnyUtmPatternWithMode(c, a, ad, pattern, mode = 'contains') {
   const p = normUtm(pattern);
   if (!p) return true;
-  return [c, a, ad].some((x) => normUtm(x).includes(p));
+  const hasMatch = [c, a, ad].some((x) => normUtm(x).includes(p));
+  return normalizePatternMode(mode) === 'not_contains' ? !hasMatch : hasMatch;
+}
+
+function matchesAllUtmPatterns(c, a, ad, rules = []) {
+  const safeRules = normalizeCampaignPatternRules(rules);
+  if (!safeRules.length) return true;
+  return safeRules.every((r) => matchesAnyUtmPatternWithMode(c, a, ad, r.value, r.mode));
 }
 
 function matchesAnyUtmExact(c, a, ad, expected) {
@@ -3875,6 +4052,9 @@ function getTrafficLeadStats(filters = {}) {
   const mqlRows = getRowsForMetricKey('mql');
   const leadDateCol = getTrafficLeadDateCol(leadRows);
   const mqlDateCol = getTrafficLeadDateCol(mqlRows);
+  const patternRules = normalizeCampaignPatternRules(filters.campPatternRules && filters.campPatternRules.length
+    ? filters.campPatternRules
+    : (filters.campPattern ? [{ mode: filters.campPatternMode || 'contains', value: filters.campPattern }] : []));
   let leads = 0, mql = 0;
   leadRows.forEach(r => {
     if (!rowMatchesMetricRule(r, METRIC_RULES.lead)) return;
@@ -3886,7 +4066,7 @@ function getTrafficLeadStats(filters = {}) {
     const a = getLeadUtmContent(r);
     const ad = getLeadUtmTerm(r);
     const hasAnyUtm = hasAttributionValue(c) || hasAttributionValue(a) || hasAttributionValue(ad);
-    if (filters.campPattern && hasAnyUtm && !matchesAnyUtmPattern(c, a, ad, filters.campPattern)) return;
+    if (patternRules.length && hasAnyUtm && !matchesAllUtmPatterns(c, a, ad, patternRules)) return;
     if (filters.fCamp && hasAnyUtm && !matchesAnyUtmExact(c, a, ad, filters.fCamp)) return;
     if (filters.fAdset && hasAnyUtm && !matchesAnyUtmExact(c, a, ad, filters.fAdset)) return;
     if (filters.fAd && hasAnyUtm && !matchesAnyUtmExact(c, a, ad, filters.fAd)) return;
@@ -3902,7 +4082,7 @@ function getTrafficLeadStats(filters = {}) {
     const a = getLeadUtmContent(r);
     const ad = getLeadUtmTerm(r);
     const hasAnyUtm = hasAttributionValue(c) || hasAttributionValue(a) || hasAttributionValue(ad);
-    if (filters.campPattern && hasAnyUtm && !matchesAnyUtmPattern(c, a, ad, filters.campPattern)) return;
+    if (patternRules.length && hasAnyUtm && !matchesAllUtmPatterns(c, a, ad, patternRules)) return;
     if (filters.fCamp && hasAnyUtm && !matchesAnyUtmExact(c, a, ad, filters.fCamp)) return;
     if (filters.fAdset && hasAnyUtm && !matchesAnyUtmExact(c, a, ad, filters.fAdset)) return;
     if (filters.fAd && hasAnyUtm && !matchesAnyUtmExact(c, a, ad, filters.fAd)) return;
@@ -3953,6 +4133,9 @@ function countStageInPeriod(rows, filters, metricKey = 'lead') {
   if (!rows.length) return 0;
   const dateCol = getTrafficLeadDateCol(rows);
   const rule = METRIC_RULES[metricKey] || DEFAULT_METRIC_RULES.lead;
+  const patternRules = normalizeCampaignPatternRules(filters?.campPatternRules && filters.campPatternRules.length
+    ? filters.campPatternRules
+    : (filters?.campPattern ? [{ mode: filters?.campPatternMode || 'contains', value: filters.campPattern }] : []));
   let count = 0;
   rows.forEach(r => {
     if (!rowMatchesMetricRule(r, rule)) return;
@@ -3965,7 +4148,7 @@ function countStageInPeriod(rows, filters, metricKey = 'lead') {
     const ad = getLeadUtmTerm(r);
     const hasAnyUtm = hasAttributionValue(c) || hasAttributionValue(a) || hasAttributionValue(ad);
     // Match por qualquer UTM (campaign/content/term) para alinhamento com atribuição de tráfego.
-    if (filters.campPattern && hasAnyUtm && !matchesAnyUtmPattern(c, a, ad, filters.campPattern)) return;
+    if (patternRules.length && hasAnyUtm && !matchesAllUtmPatterns(c, a, ad, patternRules)) return;
     if (filters.fCamp && hasAnyUtm && !matchesAnyUtmExact(c, a, ad, filters.fCamp)) return;
     if (filters.fAdset && hasAnyUtm && !matchesAnyUtmExact(c, a, ad, filters.fAdset)) return;
     if (filters.fAd && hasAnyUtm && !matchesAnyUtmExact(c, a, ad, filters.fAd)) return;
@@ -4064,6 +4247,8 @@ function onDailyMetricChange() {
   try {
     localStorage.setItem(getTrafficKey(), JSON.stringify({
       campaignContains,
+      campaignPatternMode,
+      campaignPatternRules,
       visibleMetrics: Array.from(visibleMetrics),
       dailyValueMetric,
       dailyCostMetric,
@@ -4106,11 +4291,11 @@ function rebuildAllFilters() {
   if (!RAW.ads.length) return;
   const onlyLeads = document.getElementById('onlyWithLeads')?.checked || false;
   const leadKeys = leadKeysInPeriod();
-  const campPattern = (document.getElementById('campContains')?.value || campaignContains || '').trim();
+  const patternRules = buildEffectiveCampaignPatternRules();
 
   const adsInPeriod = RAW.ads.filter(r => {
     if (!inPeriod(parseDate(getAdsDate(r)))) return false;
-    if (campPattern && !normKey(getCampName(r)).includes(normKey(campPattern))) return false;
+    if (patternRules.length && !matchesAllCampaignPatterns(getCampName(r), patternRules)) return false;
     return true;
   });
 
@@ -4245,6 +4430,8 @@ function setAttributionMode(mode) {
   try {
     localStorage.setItem(getTrafficKey(), JSON.stringify({
       campaignContains,
+      campaignPatternMode,
+      campaignPatternRules,
       visibleMetrics: Array.from(visibleMetrics),
       dailyValueMetric,
       dailyCostMetric,
@@ -4408,9 +4595,12 @@ function renderTopLeadBlocks(adsRows) {
 
 function onCampaignContainsChange() {
   campaignContains = (document.getElementById('campContains')?.value || '').trim();
+  campaignPatternMode = normalizePatternMode(document.getElementById('campPatternMode')?.value || campaignPatternMode);
   try {
     localStorage.setItem(getTrafficKey(), JSON.stringify({
       campaignContains,
+      campaignPatternMode,
+      campaignPatternRules,
       visibleMetrics: Array.from(visibleMetrics),
       dailyValueMetric,
       dailyCostMetric,
@@ -4419,6 +4609,8 @@ function onCampaignContainsChange() {
   } catch {}
   const cfgInp = document.getElementById('defaultCampContains');
   if (cfgInp) cfgInp.value = campaignContains;
+  const cfgMode = document.getElementById('defaultCampMode');
+  if (cfgMode) cfgMode.value = campaignPatternMode;
   syncGlobalsToActiveFunnel();
   persistConfigState();
   document.getElementById('campSelect').value = '';
@@ -4438,6 +4630,8 @@ function ensureVisibleMetricsNotEmpty() {
   try {
     localStorage.setItem(getTrafficKey(), JSON.stringify({
       campaignContains,
+      campaignPatternMode,
+      campaignPatternRules,
       visibleMetrics: Array.from(visibleMetrics),
       dailyValueMetric,
       dailyCostMetric,
@@ -4478,6 +4672,8 @@ function onVisibleMetricsChange() {
   try {
     localStorage.setItem(getTrafficKey(), JSON.stringify({
       campaignContains,
+      campaignPatternMode,
+      campaignPatternRules,
       visibleMetrics: Array.from(visibleMetrics),
       dailyValueMetric,
       dailyCostMetric,
@@ -4500,6 +4696,8 @@ function selectAllVisibleMetrics(event) {
   try {
     localStorage.setItem(getTrafficKey(), JSON.stringify({
       campaignContains,
+      campaignPatternMode,
+      campaignPatternRules,
       visibleMetrics: Array.from(visibleMetrics),
       dailyValueMetric,
       dailyCostMetric,
@@ -4578,13 +4776,15 @@ function renderTrafego() {
   const fAd    = document.getElementById('adSelect').value;
   const onlyLeads = document.getElementById('onlyWithLeads').checked;
   const campPattern = (document.getElementById('campContains')?.value || campaignContains || '').trim();
+  const campPatternModeValue = normalizePatternMode(document.getElementById('campPatternMode')?.value || campaignPatternMode);
+  const campPatternRules = buildEffectiveCampaignPatternRules();
 
   // Filtro principal de Ads
   let adsRows = RAW.ads.filter(r => {
     const d = parseDate(getAdsDate(r));
     const campName = getCampName(r);
     if (!inPeriod(d)) return false;
-    if (campPattern && !normKey(campName).includes(normKey(campPattern))) return false;
+    if (campPatternRules.length && !matchesAllCampaignPatterns(campName, campPatternRules)) return false;
     if (fCamp  && campName !== fCamp)  return false;
     if (fAdset && getAdsetName(r) !== fAdset) return false;
     if (fAd    && getAdName(r)    !== fAd)    return false;
@@ -4623,21 +4823,21 @@ function renderTrafego() {
   const cpm = imp    > 0 ? spend  / imp * 1000 : 0;
   const cpc = clicks > 0 ? spend  / clicks     : 0;
 
-  const { leads, mql } = getTrafficLeadStats({ fCamp, fAdset, fAd, campPattern });
+  const { leads, mql } = getTrafficLeadStats({ fCamp, fAdset, fAd, campPattern, campPatternMode: campPatternModeValue, campPatternRules });
 
   // CPL = verba gasta no período ÷ leads convertidos no período
   const cpl      = leads > 0 && spend > 0 ? spend / leads : 0;
   const cpmql    = mql > 0 && spend > 0 ? spend / mql : 0;
   const convRate = clicks > 0 && leads > 0 ? leads / clicks * 100 : 0;
-  const agendadas = countStageInPeriod(getRowsForMetricKey('agendada'), { fCamp, fAdset, fAd, campPattern }, 'agendada');
-  const confirmadas = countStageInPeriod(getRowsForMetricKey('confirmada'), { fCamp, fAdset, fAd, campPattern }, 'confirmada');
-  const callFeita = countStageInPeriod(getRowsForMetricKey('callFeita'), { fCamp, fAdset, fAd, campPattern }, 'callFeita');
+  const agendadas = countStageInPeriod(getRowsForMetricKey('agendada'), { fCamp, fAdset, fAd, campPattern, campPatternMode: campPatternModeValue, campPatternRules }, 'agendada');
+  const confirmadas = countStageInPeriod(getRowsForMetricKey('confirmada'), { fCamp, fAdset, fAd, campPattern, campPatternMode: campPatternModeValue, campPatternRules }, 'confirmada');
+  const callFeita = countStageInPeriod(getRowsForMetricKey('callFeita'), { fCamp, fAdset, fAd, campPattern, campPatternMode: campPatternModeValue, campPatternRules }, 'callFeita');
   const txQualificacao = leads > 0 && mql > 0 ? (mql / leads * 100) : 0;
   const txMqlToContato = mql > 0 && agendadas > 0 ? (agendadas / mql * 100) : 0;
   const txContatoToConfirmada = agendadas > 0 && confirmadas > 0 ? (confirmadas / agendadas * 100) : 0;
   const txConfirmadaToCallFeita = confirmadas > 0 && callFeita > 0 ? (callFeita / confirmadas * 100) : 0;
   const connectRate = clicks > 0 && lpv > 0 ? (lpv / clicks * 100) : 0;
-  const noShow = countStageInPeriod(getRowsForMetricKey('noShow'), { fCamp, fAdset, fAd, campPattern }, 'noShow');
+  const noShow = countStageInPeriod(getRowsForMetricKey('noShow'), { fCamp, fAdset, fAd, campPattern, campPatternMode: campPatternModeValue, campPatternRules }, 'noShow');
   const txNoShow = confirmadas > 0 && noShow > 0 ? (noShow / confirmadas * 100) : 0;
   const custoContato = agendadas > 0 && spend > 0 ? spend / agendadas : 0;
   const custoConfirmada = confirmadas > 0 && spend > 0 ? spend / confirmadas : 0;
@@ -4740,7 +4940,7 @@ function renderTrafego() {
         const a = getLeadUtmContent(r);
         const ad = getLeadUtmTerm(r);
         const hasAnyUtm = hasAttributionValue(c) || hasAttributionValue(a) || hasAttributionValue(ad);
-        if (campPattern && hasAnyUtm && !matchesAnyUtmPattern(c, a, ad, campPattern)) return;
+        if (campPatternRules.length && hasAnyUtm && !matchesAllUtmPatterns(c, a, ad, campPatternRules)) return;
         if (fCamp && hasAnyUtm && !matchesAnyUtmExact(c, a, ad, fCamp)) return;
         if (fAdset && hasAnyUtm && !matchesAnyUtmExact(c, a, ad, fAdset)) return;
         if (fAd && hasAnyUtm && !matchesAnyUtmExact(c, a, ad, fAd)) return;
@@ -5053,6 +5253,8 @@ document.getElementById('sheetLinkConfig').value = METRICS_PUBLISHED_BASE;
 document.getElementById('tenantKey').value     = CLIENT_KEY;
 document.getElementById('brandNameInput').value = BRAND_NAME;
 document.getElementById('campContains').value  = campaignContains;
+document.getElementById('campPatternMode').value = campaignPatternMode;
+document.getElementById('defaultCampMode').value = campaignPatternMode;
 document.getElementById('perfSortMetric').value = perfSortMetric;
 document.getElementById('topSortMetric').value = topSortMetric;
 document.getElementById('dailyValueMetric').value = dailyValueMetric;
