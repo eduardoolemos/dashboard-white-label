@@ -234,6 +234,13 @@ tbody td { padding:11px 12px; font-size:13px; color:var(--text); }
 .auth-actions { display:flex; gap:8px; flex-wrap:wrap; margin-top:8px; }
 .auth-status { font-size:11px; color:var(--text2); margin-top:8px; min-height:14px; }
 .header-user { font-family:var(--font-mono); font-size:10px; color:var(--text2); text-transform:uppercase; letter-spacing:0.08em; }
+.login-screen { min-height:100vh; display:flex; align-items:center; justify-content:center; padding:20px; }
+.login-panel { width:min(460px, 92vw); background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:24px; }
+.login-title { font-family:var(--font-head); font-size:24px; color:var(--white); margin-bottom:8px; }
+.login-sub { color:var(--text2); font-size:13px; margin-bottom:18px; line-height:1.5; }
+.login-panel .funnel-input { width:100%; margin-bottom:10px; }
+.login-actions { display:flex; gap:8px; align-items:center; }
+.app-shell { display:none; }
 .rule-setup-row { display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:10px; }
 .rule-setup-title { font-family:var(--font-mono); font-size:10px; text-transform:uppercase; letter-spacing:0.08em; color:var(--text2); }
 .modal-overlay { position:fixed; inset:0; background:rgba(3,8,16,0.72); z-index:500; display:none; align-items:center; justify-content:center; padding:20px; }
@@ -267,6 +274,20 @@ tbody td { padding:11px 12px; font-size:13px; color:var(--text); }
 </head>
 <body>
 
+<div id="loginScreen" class="login-screen">
+  <div class="login-panel">
+    <div class="login-title">Entrar no Dashboard</div>
+    <div class="login-sub">Faça login para acessar os dashboards liberados para seu usuário.</div>
+    <input class="funnel-input" id="authEmail" type="email" placeholder="E-mail">
+    <input class="funnel-input" id="authPassword" type="password" placeholder="Senha">
+    <div class="login-actions">
+      <button class="btn-stage-add" type="button" onclick="loginDashboard()">Entrar</button>
+    </div>
+    <div class="auth-status" id="authStatus"></div>
+  </div>
+</div>
+
+<div id="appShell" class="app-shell">
 <div class="header">
   <div class="logo">
     <span id="brandNameHeader">evolving</span><span>.</span>
@@ -342,19 +363,6 @@ tbody td { padding:11px 12px; font-size:13px; color:var(--text); }
     <div class="config-panel">
       <div class="config-title">Configurar Planilha</div>
       <div class="config-sub">Use uma unica planilha Google com varias abas (paginas). Para modo privado, compartilhe a planilha com o e-mail da Service Account.</div>
-      <div class="auth-block">
-        <div class="stage-config-title">Autenticação</div>
-        <div class="auth-row">
-          <input class="funnel-input" id="authEmail" type="email" placeholder="E-mail">
-          <input class="funnel-input" id="authPassword" type="password" placeholder="Senha">
-        </div>
-        <div class="auth-actions">
-          <button class="btn-stage-add" type="button" onclick="loginDashboard()">Entrar</button>
-          <button class="btn-stage-remove" type="button" onclick="logoutDashboard()">Sair</button>
-        </div>
-        <div class="auth-status" id="authStatus"></div>
-      </div>
-
       <div class="auth-block">
         <div class="stage-config-title">Dashboard no Banco</div>
         <div class="config-hint" style="margin-bottom:10px;">Selecione o dashboard liberado para seu usuário. As edições são salvas automaticamente.</div>
@@ -956,6 +964,7 @@ tbody td { padding:11px 12px; font-size:13px; color:var(--text); }
     </div>
   </div>
 </div>
+</div>
 
 <script>
 // ── CONFIG ──────────────────────────────
@@ -1018,6 +1027,20 @@ function updateHeaderAuthUi() {
   if (btnLogout) btnLogout.style.display = AUTH_TOKEN ? 'inline-flex' : 'none';
 }
 
+function showLoginScreen() {
+  const login = document.getElementById('loginScreen');
+  const shell = document.getElementById('appShell');
+  if (login) login.style.display = 'flex';
+  if (shell) shell.style.display = 'none';
+}
+
+function showAppShell() {
+  const login = document.getElementById('loginScreen');
+  const shell = document.getElementById('appShell');
+  if (login) login.style.display = 'none';
+  if (shell) shell.style.display = 'block';
+}
+
 function getRole() {
   return AUTH_USER?.role || 'user';
 }
@@ -1048,15 +1071,14 @@ async function apiRequest(path, options = {}) {
 
 function applyRoleUi() {
   const isAdmin = getRole() === 'super_admin';
-  const isAuthenticated = Boolean(AUTH_USER);
   const adminPanel = document.getElementById('adminPanel');
   if (adminPanel) adminPanel.style.display = isAdmin ? 'block' : 'none';
 
   const tabPesquisa = document.querySelector('.tab[onclick="switchTab(\'pesquisa\')"]');
   const tabConfig = document.querySelector('.tab[onclick="switchTab(\'config\')"]');
   if (tabPesquisa) tabPesquisa.style.display = isAdmin ? '' : 'none';
-  if (tabConfig) tabConfig.style.display = (!isAuthenticated || isAdmin) ? '' : 'none';
-  if (isAuthenticated && !isAdmin && (currentTab === 'config' || currentTab === 'pesquisa')) {
+  if (tabConfig) tabConfig.style.display = isAdmin ? '' : 'none';
+  if (!isAdmin && (currentTab === 'config' || currentTab === 'pesquisa')) {
     switchTab('conversoes');
   }
 }
@@ -1200,6 +1222,7 @@ async function loginDashboard() {
     AUTH_TOKEN = String(data?.token || '');
     AUTH_USER = data?.user || null;
     localStorage.setItem(AUTH_TOKEN_KEY, AUTH_TOKEN);
+    showAppShell();
     updateHeaderAuthUi();
     applyRoleUi();
     setStatus('authStatus', `Autenticado como ${AUTH_USER?.email || ''}`);
@@ -1228,10 +1251,10 @@ function logoutDashboard() {
   updateHeaderAuthUi();
   applyRoleUi();
   renderDashboardSelect();
+  showLoginScreen();
   setStatus('authStatus', 'Sessão encerrada.');
   setStatus('dashboardStatus', 'Faça login para carregar dashboards.', true);
-  document.getElementById('loadingScreen').style.display = 'none';
-  switchTab('config');
+  document.getElementById('authPassword').value = '';
 }
 
 async function createDashboardAdmin() {
@@ -2044,8 +2067,7 @@ METRICS_EXPORT_BASE = METRICS_SHEET_ID ? `https://docs.google.com/spreadsheets/d
 
 // ── TAB ────────────────────────────────
 function switchTab(tab) {
-  const isAuthenticated = Boolean(AUTH_USER);
-  if ((tab === 'config' || tab === 'pesquisa') && isAuthenticated && getRole() !== 'super_admin') {
+  if ((tab === 'config' || tab === 'pesquisa') && getRole() !== 'super_admin') {
     tab = 'conversoes';
   }
   currentTab = tab;
@@ -5051,13 +5073,13 @@ setStatus('dashboardStatus', 'Faça login para carregar dashboards.', true);
 
 async function bootstrapAuth() {
   if (!AUTH_TOKEN) {
-    document.getElementById('loadingScreen').style.display = 'none';
-    switchTab('config');
+    showLoginScreen();
     return;
   }
   try {
     const me = await apiRequest('/auth/me');
     AUTH_USER = me?.user || null;
+    showAppShell();
     updateHeaderAuthUi();
     applyRoleUi();
     await refreshDashboards();
@@ -5066,7 +5088,7 @@ async function bootstrapAuth() {
     if (!matched) {
       setStatus('dashboardStatus', 'Nenhum dashboard liberado para o seu usuário.', true);
       document.getElementById('loadingScreen').style.display = 'none';
-      switchTab('config');
+      switchTab('conversoes');
       return;
     }
     ACTIVE_DASHBOARD_ID = String(matched.id);
@@ -5074,10 +5096,10 @@ async function bootstrapAuth() {
     await onDashboardSelectionChange();
   } catch (error) {
     AUTH_TOKEN = '';
+    AUTH_USER = null;
     localStorage.removeItem(AUTH_TOKEN_KEY);
     setStatus('authStatus', `Sessão inválida: ${error.message}`, true);
-    document.getElementById('loadingScreen').style.display = 'none';
-    switchTab('config');
+    showLoginScreen();
   }
 }
 
