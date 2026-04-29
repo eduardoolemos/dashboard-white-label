@@ -250,6 +250,16 @@ tbody td { padding:11px 12px; font-size:13px; color:var(--text); }
 .modal-sub { font-size:12px; color:var(--text2); margin-top:3px; }
 .btn-modal-close { border:1px solid var(--border2); background:transparent; color:var(--text2); border-radius:6px; padding:6px 10px; cursor:pointer; font-family:var(--font-mono); font-size:10px; text-transform:uppercase; letter-spacing:0.08em; }
 .btn-modal-close:hover { border-color:var(--teal); color:var(--teal); }
+.tutorial-box { width:min(760px, 95vw); max-height:88vh; overflow:auto; background:var(--surface); border:1px solid var(--border2); border-radius:12px; padding:20px; box-shadow:0 20px 60px rgba(0,0,0,.45); }
+.tutorial-progress { font-family:var(--font-mono); font-size:10px; text-transform:uppercase; letter-spacing:0.08em; color:var(--teal); margin-bottom:10px; }
+.tutorial-title { font-family:var(--font-head); font-size:20px; color:var(--white); margin-bottom:8px; }
+.tutorial-text { color:var(--text2); line-height:1.65; font-size:13px; margin-bottom:16px; }
+.tutorial-tip { background:var(--bg2); border:1px solid var(--border); border-radius:8px; padding:10px 12px; font-size:12px; color:var(--text2); margin-bottom:16px; }
+.tutorial-actions { display:flex; gap:8px; align-items:center; justify-content:space-between; flex-wrap:wrap; }
+.tutorial-nav { display:flex; gap:8px; align-items:center; }
+.tutorial-check { display:flex; align-items:center; gap:8px; font-family:var(--font-mono); font-size:10px; text-transform:uppercase; letter-spacing:0.08em; color:var(--text2); }
+.tutorial-check input { accent-color:var(--teal); }
+.btn-disabled { opacity:.55; cursor:not-allowed; pointer-events:none; }
 .metric-help { display:block; margin-top:4px; color:var(--text3); font-size:10px; font-family:var(--font-mono); line-height:1.4; }
 .config-steps { display:flex; flex-direction:column; gap:8px; margin-bottom:24px; }
 .config-step { display:flex; align-items:flex-start; gap:10px; }
@@ -524,6 +534,26 @@ tbody td { padding:11px 12px; font-size:13px; color:var(--text); }
       <div style="display:flex;justify-content:space-between;gap:8px;align-items:center;margin-top:12px;">
         <button type="button" class="btn-ghost" style="max-width:240px;margin-top:0;" onclick="autoMapMetricRuleColumns()">Usar nomes detectados</button>
         <button type="button" class="btn-load" style="max-width:240px;margin-top:0;" onclick="closeMetricRulesModal()">Salvar e fechar</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="tutorialModal" class="modal-overlay">
+    <div class="tutorial-box">
+      <div class="tutorial-progress" id="tutorialProgress">Passo 1 de 1</div>
+      <div class="tutorial-title" id="tutorialTitle">Tutorial rápido</div>
+      <div class="tutorial-text" id="tutorialText"></div>
+      <div class="tutorial-tip" id="tutorialTip"></div>
+      <div class="tutorial-actions">
+        <label class="tutorial-check">
+          <input type="checkbox" id="tutorialDontShow">
+          Não mostrar novamente
+        </label>
+        <div class="tutorial-nav">
+          <button type="button" class="btn-modal-close" id="tutorialPrevBtn" onclick="prevTutorialStep()">Anterior</button>
+          <button type="button" class="btn-modal-close" onclick="skipTutorial()">Pular</button>
+          <button type="button" class="btn-stage-add" id="tutorialNextBtn" onclick="nextTutorialStep()">Próximo</button>
+        </div>
       </div>
     </div>
   </div>
@@ -1028,12 +1058,15 @@ function getTrafficKey() {
 }
 
 const AUTH_TOKEN_KEY = 'dash_auth_token_v1';
+const TUTORIAL_PREF_KEY = 'dash_tutorial_pref_v1';
 let AUTH_TOKEN = localStorage.getItem(AUTH_TOKEN_KEY) || '';
 let AUTH_USER = null;
 let DASHBOARDS = [];
 let ACTIVE_DASHBOARD_ID = null;
 let REMOTE_SYNC_PAUSED = false;
 let remoteSaveTimer = null;
+let tutorialSteps = [];
+let tutorialStepIndex = 0;
 
 function setStatus(id, text, isError = false) {
   const el = document.getElementById(id);
@@ -1065,6 +1098,127 @@ function showAppShell() {
 
 function getRole() {
   return AUTH_USER?.role || 'user';
+}
+
+function getTutorialPrefStorageKey() {
+  const email = String(AUTH_USER?.email || 'anon').trim().toLowerCase();
+  return `${TUTORIAL_PREF_KEY}:${email}`;
+}
+
+function getTutorialHidePreference() {
+  try {
+    return localStorage.getItem(getTutorialPrefStorageKey()) === '1';
+  } catch {
+    return false;
+  }
+}
+
+function setTutorialHidePreference(hide) {
+  try {
+    localStorage.setItem(getTutorialPrefStorageKey(), hide ? '1' : '0');
+  } catch {}
+}
+
+function buildTutorialSteps() {
+  const isAdmin = getRole() === 'super_admin';
+  const steps = [
+    {
+      title: 'Bem-vindo ao dashboard',
+      text: 'Este guia mostra como navegar pelas abas principais para acompanhar conversões e tráfego sem se perder.',
+      tip: 'Use "Anterior" e "Próximo" para avançar no passo a passo.'
+    },
+    {
+      tab: 'conversoes',
+      title: 'Aba Conversões',
+      text: 'Aqui você acompanha os indicadores comerciais (lead, MQL, agendada, confirmada, no-show e call feita).',
+      tip: 'Você pode ajustar período e filtros para comparar os resultados.'
+    },
+    {
+      tab: 'trafego',
+      title: 'Aba Métricas de Tráfego',
+      text: 'Nesta aba você vê dados de mídia, funil de campanha e taxas calculadas (com leitura em formato X de Y).',
+      tip: 'Troque entre métricas principais/secundárias e teste filtros de campanha para análises detalhadas.'
+    }
+  ];
+  if (isAdmin) {
+    steps.push(
+      {
+        tab: 'pesquisa',
+        title: 'Aba Config Pesquisa (admin)',
+        text: 'Use esta área para mapear colunas, regras de qualificação e integrações da aba de conversões da planilha.',
+        tip: 'Após ajustes, salve para refletir nos dados comerciais.'
+      },
+      {
+        tab: 'config',
+        title: 'Aba Config (admin)',
+        text: 'Aqui você gerencia dashboard, tenant, funis, GIDs e permissões de acesso para usuários.',
+        tip: 'As alterações ficam salvas no banco para o dashboard ativo.'
+      }
+    );
+  }
+  return steps;
+}
+
+function renderTutorialStep() {
+  if (!tutorialSteps.length) return;
+  const step = tutorialSteps[tutorialStepIndex];
+  if (step?.tab) switchTab(step.tab);
+
+  const progress = document.getElementById('tutorialProgress');
+  const title = document.getElementById('tutorialTitle');
+  const text = document.getElementById('tutorialText');
+  const tip = document.getElementById('tutorialTip');
+  const prevBtn = document.getElementById('tutorialPrevBtn');
+  const nextBtn = document.getElementById('tutorialNextBtn');
+
+  if (progress) progress.textContent = `Passo ${tutorialStepIndex + 1} de ${tutorialSteps.length}`;
+  if (title) title.textContent = step?.title || 'Tutorial';
+  if (text) text.textContent = step?.text || '';
+  if (tip) tip.textContent = step?.tip || '';
+  if (prevBtn) prevBtn.classList.toggle('btn-disabled', tutorialStepIndex === 0);
+  if (nextBtn) nextBtn.textContent = tutorialStepIndex >= tutorialSteps.length - 1 ? 'Finalizar' : 'Próximo';
+}
+
+function closeTutorial() {
+  const modal = document.getElementById('tutorialModal');
+  const dontShow = document.getElementById('tutorialDontShow');
+  if (dontShow?.checked) setTutorialHidePreference(true);
+  if (modal) modal.style.display = 'none';
+}
+
+function openTutorial() {
+  tutorialSteps = buildTutorialSteps();
+  tutorialStepIndex = 0;
+  const dontShow = document.getElementById('tutorialDontShow');
+  const modal = document.getElementById('tutorialModal');
+  if (dontShow) dontShow.checked = false;
+  if (modal) modal.style.display = 'flex';
+  renderTutorialStep();
+}
+
+function maybeShowTutorialOnLogin() {
+  if (!AUTH_USER) return;
+  if (getTutorialHidePreference()) return;
+  openTutorial();
+}
+
+function nextTutorialStep() {
+  if (tutorialStepIndex >= tutorialSteps.length - 1) {
+    closeTutorial();
+    return;
+  }
+  tutorialStepIndex += 1;
+  renderTutorialStep();
+}
+
+function prevTutorialStep() {
+  if (tutorialStepIndex <= 0) return;
+  tutorialStepIndex -= 1;
+  renderTutorialStep();
+}
+
+function skipTutorial() {
+  closeTutorial();
 }
 
 function apiPath(path) {
@@ -1263,9 +1417,11 @@ async function loginDashboard() {
       ACTIVE_DASHBOARD_ID = String(matched.id);
       renderDashboardSelect();
       await onDashboardSelectionChange();
+      maybeShowTutorialOnLogin();
     } else {
       setStatus('dashboardStatus', 'Nenhum dashboard disponível para este usuário.', true);
       switchTab('config');
+      maybeShowTutorialOnLogin();
     }
   } catch (error) {
     setStatus('authStatus', `Falha no login: ${error.message}`, true);
@@ -4952,6 +5108,7 @@ function renderTrafego() {
   const txLpvToCart = lpv > 0 && addToCart > 0 ? (addToCart / lpv * 100) : 0;
   const txCartToPurchase = addToCart > 0 && purchase > 0 ? (purchase / addToCart * 100) : 0;
   const funnelType = String(getActiveFunnel()?.funnelType || 'sessao_estrategica');
+  const txCallFeita = agendadas > 0 && callFeita > 0 ? (callFeita / agendadas) * 100 : 0;
 
   const metricCounts = {
     lead: leads,
@@ -4991,11 +5148,14 @@ function renderTrafego() {
     const toKey = nextActiveMetric(fromKey);
     const fromVal = Number(metricCounts[fromKey] || 0);
     const toVal = Number(metricCounts[toKey] || 0);
+    const fromLabel = String(metricLabel[fromKey] || 'base').toLowerCase();
     return {
       toKey,
+      fromVal,
+      toVal,
       rate: fromVal > 0 && toVal > 0 ? (toVal / fromVal) * 100 : 0,
       label: toKey ? `Tx ${metricLabel[fromKey]} → ${metricLabel[toKey]}` : `Tx ${metricLabel[fromKey]}`,
-      sub: toKey ? `${String(metricLabel[toKey]).toLowerCase()} ÷ ${String(metricLabel[fromKey]).toLowerCase()}` : 'sem próxima etapa ativa'
+      sub: toKey ? `${fmt(toVal)} de ${fmt(fromVal)} ${fromLabel}` : 'sem próxima etapa ativa'
     };
   };
   const txQualificacaoData = buildTransition('lead');
@@ -5007,7 +5167,7 @@ function renderTrafego() {
     : (previousActiveMetric('confirmada') || 'lead');
   const noShowBaseVal = Number(metricCounts[noShowBaseKey] || 0);
   const txNoShow = noShowBaseVal > 0 && noShow > 0 ? (noShow / noShowBaseVal) * 100 : 0;
-  const txNoShowSub = `no-show ÷ ${String(metricLabel[noShowBaseKey] || 'base').toLowerCase()}`;
+  const txNoShowSub = `${fmt(noShow)} de ${fmt(noShowBaseVal)} ${String(metricLabel[noShowBaseKey] || 'base').toLowerCase()}`;
 
   const primaryHtmlStrategic = `
     <div class="kpi-card red kpi-span-3"><div class="kpi-label"><span class="metric-dot dot-red"></span>Verba Gasta</div><div class="kpi-value red small">${brl(spend)}</div><div class="kpi-sub">base de custos no período</div></div>
@@ -5030,7 +5190,7 @@ function renderTrafego() {
 
     <div class="kpi-card teal"><div class="kpi-label"><span class="metric-dot dot-green"></span>Call Feita</div><div class="kpi-value teal">${fmt(callFeita)}</div><div class="kpi-sub">etapa call feita</div></div>
     <div class="kpi-card gold"><div class="kpi-label"><span class="metric-dot dot-orange"></span>Custo Call Feita</div><div class="kpi-value gold small">${callFeita > 0 ? brl(custoCallFeita) : '—'}</div><div class="kpi-sub">verba ÷ call feita</div></div>
-    <div class="kpi-card purple"><div class="kpi-label"><span class="metric-dot dot-pink"></span>Tx Call Feita</div><div class="kpi-value purple">—</div><div class="kpi-sub">aguardando métrica de venda</div></div>
+    <div class="kpi-card purple"><div class="kpi-label"><span class="metric-dot dot-pink"></span>Tx Call Feita</div><div class="kpi-value purple">${txCallFeita > 0 ? pct(txCallFeita) : '—'}</div><div class="kpi-sub">${fmt(callFeita)} de ${fmt(agendadas)} contato</div></div>
 
     <div class="kpi-card purple"><div class="kpi-label"><span class="metric-dot dot-red"></span>No-Show</div><div class="kpi-value purple">${fmt(noShow)}</div><div class="kpi-sub">perda na etapa</div></div>
     <div class="kpi-card red"><div class="kpi-label"><span class="metric-dot dot-red"></span>Custo No-Show</div><div class="kpi-value red small">${noShow > 0 ? brl(custoNoShow) : '—'}</div><div class="kpi-sub">verba ÷ no-show</div></div>
@@ -5041,15 +5201,15 @@ function renderTrafego() {
     <div class="kpi-card red kpi-span-3"><div class="kpi-label"><span class="metric-dot dot-red"></span>Verba Gasta</div><div class="kpi-value red small">${brl(spend)}</div><div class="kpi-sub">base de custos no período</div></div>
     <div class="kpi-card teal"><div class="kpi-label"><span class="metric-dot dot-purple"></span>Cliques no Link</div><div class="kpi-value teal">${fmt(clicks)}</div><div class="kpi-sub">tráfego gerado</div></div>
     <div class="kpi-card gold"><div class="kpi-label"><span class="metric-dot dot-orange"></span>Custo por Clique</div><div class="kpi-value gold small">${clicks > 0 ? brl(cpc) : '—'}</div><div class="kpi-sub">verba ÷ cliques</div></div>
-    <div class="kpi-card purple"><div class="kpi-label"><span class="metric-dot dot-blue"></span>Tx Clique → LPV</div><div class="kpi-value purple">${txClickToLpv > 0 ? pct(txClickToLpv) : '—'}</div><div class="kpi-sub">LPV ÷ cliques</div></div>
+    <div class="kpi-card purple"><div class="kpi-label"><span class="metric-dot dot-blue"></span>Tx Clique → LPV</div><div class="kpi-value purple">${txClickToLpv > 0 ? pct(txClickToLpv) : '—'}</div><div class="kpi-sub">${fmt(lpv)} de ${fmt(clicks)} cliques</div></div>
     <div class="kpi-card teal"><div class="kpi-label"><span class="metric-dot dot-pink"></span>Visualização Página Destino</div><div class="kpi-value teal">${fmt(lpv)}</div><div class="kpi-sub">landing views</div></div>
     <div class="kpi-card gold"><div class="kpi-label"><span class="metric-dot dot-gold"></span>Custo por LPV</div><div class="kpi-value gold small">${lpv > 0 ? brl(custoLpv) : '—'}</div><div class="kpi-sub">verba ÷ LPV</div></div>
     <div class="kpi-card purple"><div class="kpi-label"><span class="metric-dot dot-pink"></span>Adição ao Carrinho</div><div class="kpi-value purple">${fmt(addToCart)}</div><div class="kpi-sub">evento de intenção</div></div>
     <div class="kpi-card gold"><div class="kpi-label"><span class="metric-dot dot-orange"></span>Custo por Carrinho</div><div class="kpi-value gold small">${addToCart > 0 ? brl(custoAddToCart) : '—'}</div><div class="kpi-sub">verba ÷ add to cart</div></div>
-    <div class="kpi-card purple"><div class="kpi-label"><span class="metric-dot dot-pink"></span>Tx LPV → Carrinho</div><div class="kpi-value purple">${txLpvToCart > 0 ? pct(txLpvToCart) : '—'}</div><div class="kpi-sub">add to cart ÷ LPV</div></div>
+    <div class="kpi-card purple"><div class="kpi-label"><span class="metric-dot dot-pink"></span>Tx LPV → Carrinho</div><div class="kpi-value purple">${txLpvToCart > 0 ? pct(txLpvToCart) : '—'}</div><div class="kpi-sub">${fmt(addToCart)} de ${fmt(lpv)} LPV</div></div>
     <div class="kpi-card teal"><div class="kpi-label"><span class="metric-dot dot-green"></span>Compra</div><div class="kpi-value teal">${fmt(purchase)}</div><div class="kpi-sub">evento final</div></div>
     <div class="kpi-card gold"><div class="kpi-label"><span class="metric-dot dot-orange"></span>Custo por Compra</div><div class="kpi-value gold small">${purchase > 0 ? brl(custoPurchase) : '—'}</div><div class="kpi-sub">verba ÷ compras</div></div>
-    <div class="kpi-card purple"><div class="kpi-label"><span class="metric-dot dot-pink"></span>Tx Carrinho → Compra</div><div class="kpi-value purple">${txCartToPurchase > 0 ? pct(txCartToPurchase) : '—'}</div><div class="kpi-sub">compra ÷ carrinho</div></div>
+    <div class="kpi-card purple"><div class="kpi-label"><span class="metric-dot dot-pink"></span>Tx Carrinho → Compra</div><div class="kpi-value purple">${txCartToPurchase > 0 ? pct(txCartToPurchase) : '—'}</div><div class="kpi-sub">${fmt(purchase)} de ${fmt(addToCart)} carrinhos</div></div>
   `;
 
   const secondaryHtml = `
@@ -5057,9 +5217,9 @@ function renderTrafego() {
     <div class="kpi-card gold"><div class="kpi-label"><span class="metric-dot dot-gold"></span>CPM</div><div class="kpi-value gold small">${imp > 0 ? brl(cpm) : '—'}</div><div class="kpi-sub">verba ÷ 1.000 impressões</div></div>
     <div class="kpi-card purple"><div class="kpi-label"><span class="metric-dot dot-purple"></span>Cliques</div><div class="kpi-value purple">${fmt(clicks)}</div><div class="kpi-sub">cliques em link</div></div>
     <div class="kpi-card gold"><div class="kpi-label"><span class="metric-dot dot-orange"></span>CPC</div><div class="kpi-value gold small">${clicks > 0 ? brl(cpc) : '—'}</div><div class="kpi-sub">verba ÷ cliques</div></div>
-    <div class="kpi-card purple"><div class="kpi-label"><span class="metric-dot dot-blue"></span>CTR</div><div class="kpi-value purple">${imp > 0 ? pct(ctr) : '—'}</div><div class="kpi-sub">cliques ÷ impressões</div></div>
+    <div class="kpi-card purple"><div class="kpi-label"><span class="metric-dot dot-blue"></span>CTR</div><div class="kpi-value purple">${imp > 0 ? pct(ctr) : '—'}</div><div class="kpi-sub">${fmt(clicks)} de ${fmt(imp)} impressões</div></div>
     <div class="kpi-card gold"><div class="kpi-label"><span class="metric-dot dot-gold"></span>Custo por LPV</div><div class="kpi-value gold small">${lpv > 0 ? brl(custoLpv) : '—'}</div><div class="kpi-sub">verba ÷ landing views</div></div>
-    <div class="kpi-card teal"><div class="kpi-label"><span class="metric-dot dot-green"></span>Connect Rate</div><div class="kpi-value teal">${connectRate > 0 ? pct(connectRate) : '—'}</div><div class="kpi-sub">landing views ÷ cliques</div></div>
+    <div class="kpi-card teal"><div class="kpi-label"><span class="metric-dot dot-green"></span>Connect Rate</div><div class="kpi-value teal">${connectRate > 0 ? pct(connectRate) : '—'}</div><div class="kpi-sub">${fmt(lpv)} de ${fmt(clicks)} cliques</div></div>
     <div class="kpi-card gold"><div class="kpi-label"><span class="metric-dot dot-orange"></span>Custo por Conexão</div><div class="kpi-value gold small">${lpv > 0 ? brl(custoLpv) : '—'}</div><div class="kpi-sub">verba ÷ landing views</div></div>
     <div class="kpi-card red"><div class="kpi-label"><span class="metric-dot dot-red"></span>Verba Gasta</div><div class="kpi-value red small">${brl(spend)}</div><div class="kpi-sub">base de custos</div></div>
     <div class="kpi-card purple"><div class="kpi-label"><span class="metric-dot dot-pink"></span>Landing Views</div><div class="kpi-value purple">${fmt(lpv)}</div><div class="kpi-sub">visualizações da página</div></div>
@@ -5493,6 +5653,7 @@ async function bootstrapAuth() {
     ACTIVE_DASHBOARD_ID = String(matched.id);
     renderDashboardSelect();
     await onDashboardSelectionChange();
+    maybeShowTutorialOnLogin();
   } catch (error) {
     AUTH_TOKEN = '';
     AUTH_USER = null;
