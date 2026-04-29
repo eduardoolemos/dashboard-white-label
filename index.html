@@ -4939,13 +4939,8 @@ function renderTrafego() {
   const agendadas = countStageInPeriod(getRowsForMetricKey('agendada'), { fCamp, fAdset, fAd, campPattern, campPatternMode: campPatternModeValue, campPatternRules: commercialPatternRules }, 'agendada');
   const confirmadas = countStageInPeriod(getRowsForMetricKey('confirmada'), { fCamp, fAdset, fAd, campPattern, campPatternMode: campPatternModeValue, campPatternRules: commercialPatternRules }, 'confirmada');
   const callFeita = countStageInPeriod(getRowsForMetricKey('callFeita'), { fCamp, fAdset, fAd, campPattern, campPatternMode: campPatternModeValue, campPatternRules: commercialPatternRules }, 'callFeita');
-  const txQualificacao = leads > 0 && mql > 0 ? (mql / leads * 100) : 0;
-  const txMqlToContato = mql > 0 && agendadas > 0 ? (agendadas / mql * 100) : 0;
-  const txContatoToConfirmada = agendadas > 0 && confirmadas > 0 ? (confirmadas / agendadas * 100) : 0;
-  const txConfirmadaToCallFeita = confirmadas > 0 && callFeita > 0 ? (callFeita / confirmadas * 100) : 0;
   const connectRate = clicks > 0 && lpv > 0 ? (lpv / clicks * 100) : 0;
   const noShow = countStageInPeriod(getRowsForMetricKey('noShow'), { fCamp, fAdset, fAd, campPattern, campPatternMode: campPatternModeValue, campPatternRules: commercialPatternRules }, 'noShow');
-  const txNoShow = confirmadas > 0 && noShow > 0 ? (noShow / confirmadas * 100) : 0;
   const custoContato = agendadas > 0 && spend > 0 ? spend / agendadas : 0;
   const custoConfirmada = confirmadas > 0 && spend > 0 ? spend / confirmadas : 0;
   const custoNoShow = noShow > 0 && spend > 0 ? spend / noShow : 0;
@@ -4958,24 +4953,80 @@ function renderTrafego() {
   const txCartToPurchase = addToCart > 0 && purchase > 0 ? (purchase / addToCart * 100) : 0;
   const funnelType = String(getActiveFunnel()?.funnelType || 'sessao_estrategica');
 
+  const metricCounts = {
+    lead: leads,
+    mql,
+    agendada: agendadas,
+    confirmada: confirmadas,
+    callFeita,
+    noShow
+  };
+  const metricLabel = {
+    lead: 'Leads',
+    mql: 'MQL',
+    agendada: 'Contato',
+    confirmada: 'Confirmada',
+    callFeita: 'Call Feita',
+    noShow: 'No-Show'
+  };
+  const stageOrder = ['lead', 'mql', 'agendada', 'confirmada', 'callFeita'];
+  const isMetricActive = (key) => METRIC_RULES?.[key]?.available !== false;
+  const nextActiveMetric = (fromKey) => {
+    const start = stageOrder.indexOf(fromKey);
+    if (start < 0) return null;
+    for (let i = start + 1; i < stageOrder.length; i += 1) {
+      if (isMetricActive(stageOrder[i])) return stageOrder[i];
+    }
+    return null;
+  };
+  const previousActiveMetric = (fromKey) => {
+    const start = stageOrder.indexOf(fromKey);
+    if (start < 0) return null;
+    for (let i = start - 1; i >= 0; i -= 1) {
+      if (isMetricActive(stageOrder[i])) return stageOrder[i];
+    }
+    return null;
+  };
+  const buildTransition = (fromKey) => {
+    const toKey = nextActiveMetric(fromKey);
+    const fromVal = Number(metricCounts[fromKey] || 0);
+    const toVal = Number(metricCounts[toKey] || 0);
+    return {
+      toKey,
+      rate: fromVal > 0 && toVal > 0 ? (toVal / fromVal) * 100 : 0,
+      label: toKey ? `Tx ${metricLabel[fromKey]} → ${metricLabel[toKey]}` : `Tx ${metricLabel[fromKey]}`,
+      sub: toKey ? `${String(metricLabel[toKey]).toLowerCase()} ÷ ${String(metricLabel[fromKey]).toLowerCase()}` : 'sem próxima etapa ativa'
+    };
+  };
+  const txQualificacaoData = buildTransition('lead');
+  const txMqlToContatoData = buildTransition('mql');
+  const txContatoToConfirmadaData = buildTransition('agendada');
+  const txConfirmadaToCallFeitaData = buildTransition('confirmada');
+  const noShowBaseKey = isMetricActive('confirmada')
+    ? 'confirmada'
+    : (previousActiveMetric('confirmada') || 'lead');
+  const noShowBaseVal = Number(metricCounts[noShowBaseKey] || 0);
+  const txNoShow = noShowBaseVal > 0 && noShow > 0 ? (noShow / noShowBaseVal) * 100 : 0;
+  const txNoShowSub = `no-show ÷ ${String(metricLabel[noShowBaseKey] || 'base').toLowerCase()}`;
+
   const primaryHtmlStrategic = `
     <div class="kpi-card red kpi-span-3"><div class="kpi-label"><span class="metric-dot dot-red"></span>Verba Gasta</div><div class="kpi-value red small">${brl(spend)}</div><div class="kpi-sub">base de custos no período</div></div>
 
     <div class="kpi-card teal"><div class="kpi-label"><span class="metric-dot dot-teal"></span>Leads Captados</div><div class="kpi-value teal">${fmt(leads)}</div><div class="kpi-sub">conversões no período</div></div>
     <div class="kpi-card gold"><div class="kpi-label"><span class="metric-dot dot-gold"></span>Custo por Lead (CPL)</div><div class="kpi-value gold small">${leads > 0 ? brl(cpl) : '—'}</div><div class="kpi-sub">verba ÷ leads</div></div>
-    <div class="kpi-card purple"><div class="kpi-label"><span class="metric-dot dot-purple"></span>Taxa Qualificação</div><div class="kpi-value purple">${txQualificacao > 0 ? pct(txQualificacao) : '—'}</div><div class="kpi-sub">MQL ÷ Leads</div></div>
+    <div class="kpi-card purple"><div class="kpi-label"><span class="metric-dot dot-purple"></span>${txQualificacaoData.label}</div><div class="kpi-value purple">${txQualificacaoData.rate > 0 ? pct(txQualificacaoData.rate) : '—'}</div><div class="kpi-sub">${txQualificacaoData.sub}</div></div>
 
     <div class="kpi-card teal"><div class="kpi-label"><span class="metric-dot dot-blue"></span>MQL</div><div class="kpi-value teal">${fmt(mql)}</div><div class="kpi-sub">qualificação = qualificado</div></div>
     <div class="kpi-card gold"><div class="kpi-label"><span class="metric-dot dot-orange"></span>CPMQL</div><div class="kpi-value gold small">${mql > 0 ? brl(cpmql) : '—'}</div><div class="kpi-sub">verba ÷ MQL</div></div>
-    <div class="kpi-card purple"><div class="kpi-label"><span class="metric-dot dot-pink"></span>Tx MQL → Contato</div><div class="kpi-value purple">${txMqlToContato > 0 ? pct(txMqlToContato) : '—'}</div><div class="kpi-sub">contato ÷ MQL</div></div>
+    <div class="kpi-card purple"><div class="kpi-label"><span class="metric-dot dot-pink"></span>${txMqlToContatoData.label}</div><div class="kpi-value purple">${txMqlToContatoData.rate > 0 ? pct(txMqlToContatoData.rate) : '—'}</div><div class="kpi-sub">${txMqlToContatoData.sub}</div></div>
 
     <div class="kpi-card teal"><div class="kpi-label"><span class="metric-dot dot-purple"></span>Reunião Agendada</div><div class="kpi-value teal">${fmt(agendadas)}</div><div class="kpi-sub">contato de confirmação</div></div>
     <div class="kpi-card gold"><div class="kpi-label"><span class="metric-dot dot-gold"></span>Custo Agendada</div><div class="kpi-value gold small">${agendadas > 0 ? brl(custoContato) : '—'}</div><div class="kpi-sub">verba ÷ agendadas</div></div>
-    <div class="kpi-card purple"><div class="kpi-label"><span class="metric-dot dot-pink"></span>Tx Contato → Confirmada</div><div class="kpi-value purple">${txContatoToConfirmada > 0 ? pct(txContatoToConfirmada) : '—'}</div><div class="kpi-sub">confirmada ÷ contato</div></div>
+    <div class="kpi-card purple"><div class="kpi-label"><span class="metric-dot dot-pink"></span>${txContatoToConfirmadaData.label}</div><div class="kpi-value purple">${txContatoToConfirmadaData.rate > 0 ? pct(txContatoToConfirmadaData.rate) : '—'}</div><div class="kpi-sub">${txContatoToConfirmadaData.sub}</div></div>
 
     <div class="kpi-card teal"><div class="kpi-label"><span class="metric-dot dot-teal"></span>Reunião Confirmada</div><div class="kpi-value teal">${fmt(confirmadas)}</div><div class="kpi-sub">call confirmada</div></div>
     <div class="kpi-card gold"><div class="kpi-label"><span class="metric-dot dot-orange"></span>Custo Confirmada</div><div class="kpi-value gold small">${confirmadas > 0 ? brl(custoConfirmada) : '—'}</div><div class="kpi-sub">verba ÷ confirmadas</div></div>
-    <div class="kpi-card purple"><div class="kpi-label"><span class="metric-dot dot-pink"></span>Tx Confirmada → Call Feita</div><div class="kpi-value purple">${pct(txConfirmadaToCallFeita)}</div><div class="kpi-sub">call feita ÷ confirmada</div></div>
+    <div class="kpi-card purple"><div class="kpi-label"><span class="metric-dot dot-pink"></span>${txConfirmadaToCallFeitaData.label}</div><div class="kpi-value purple">${txConfirmadaToCallFeitaData.rate > 0 ? pct(txConfirmadaToCallFeitaData.rate) : '—'}</div><div class="kpi-sub">${txConfirmadaToCallFeitaData.sub}</div></div>
 
     <div class="kpi-card teal"><div class="kpi-label"><span class="metric-dot dot-green"></span>Call Feita</div><div class="kpi-value teal">${fmt(callFeita)}</div><div class="kpi-sub">etapa call feita</div></div>
     <div class="kpi-card gold"><div class="kpi-label"><span class="metric-dot dot-orange"></span>Custo Call Feita</div><div class="kpi-value gold small">${callFeita > 0 ? brl(custoCallFeita) : '—'}</div><div class="kpi-sub">verba ÷ call feita</div></div>
@@ -4983,7 +5034,7 @@ function renderTrafego() {
 
     <div class="kpi-card purple"><div class="kpi-label"><span class="metric-dot dot-red"></span>No-Show</div><div class="kpi-value purple">${fmt(noShow)}</div><div class="kpi-sub">perda na etapa</div></div>
     <div class="kpi-card red"><div class="kpi-label"><span class="metric-dot dot-red"></span>Custo No-Show</div><div class="kpi-value red small">${noShow > 0 ? brl(custoNoShow) : '—'}</div><div class="kpi-sub">verba ÷ no-show</div></div>
-    <div class="kpi-card purple"><div class="kpi-label"><span class="metric-dot dot-pink"></span>Tx No-Show</div><div class="kpi-value purple">${txNoShow > 0 ? pct(txNoShow) : '—'}</div><div class="kpi-sub">no-show ÷ confirmada</div></div>
+    <div class="kpi-card purple"><div class="kpi-label"><span class="metric-dot dot-pink"></span>Tx No-Show</div><div class="kpi-value purple">${txNoShow > 0 ? pct(txNoShow) : '—'}</div><div class="kpi-sub">${txNoShowSub}</div></div>
   `;
 
   const primaryHtmlSalesLeadMagnet = `
