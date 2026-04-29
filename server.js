@@ -1,15 +1,31 @@
 import dotenv from "dotenv"
 import express from "express"
 import { google } from "googleapis"
+import bcrypt from "bcryptjs"
+import jwt from "jsonwebtoken"
 import path from "node:path"
+import pg from "pg"
 import { fileURLToPath } from "node:url"
 
 dotenv.config()
 
 const app = express()
 const port = process.env.PORT || 3000
+const jwtSecret = process.env.JWT_SECRET || "dev-only-change-this-secret"
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
+const { Pool } = pg
+const databaseUrl = process.env.DATABASE_URL || ""
+const pool = databaseUrl
+  ? new Pool({
+      connectionString: databaseUrl,
+      ssl: databaseUrl.includes("localhost")
+        ? false
+        : { rejectUnauthorized: false },
+    })
+  : null
+
+app.use(express.json())
 
 function getServiceAccountConfig() {
   const clientEmail = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL || ""
@@ -52,8 +68,332 @@ function toCsv(rows = []) {
     .join("\n")
 }
 
+function signToken(user) {
+  return jwt.sign(
+    { sub: user.id, role: user.role, email: user.email },
+    jwtSecret,
+    { expiresIn: "7d" }
+  )
+}
+
+function getTokenFromRequest(req) {
+  const auth = String(req.headers.authorization || "")
+  if (auth.startsWith("Bearer ")) {
+    return auth.slice("Bearer ".length).trim()
+  }
+  return ""
+}
+
+function requireAuth(req, res, next) {
+  try {
+    const token = getTokenFromRequest(req)
+    if (!token) {
+      return res.status(401).json({ error: "Token de autenticação ausente." })
+    }
+    const payload = jwt.verify(token, jwtSecret)
+    req.user = payload
+    next()
+  } catch {
+    res.status(401).json({ error: "Token inválido ou expirado." })
+  }
+}
+
+function requireAdmin(req, res, next) {
+  if (req.user?.role !== "super_admin") {
+    return res.status(403).json({ error: "Acesso permitido apenas para admin." })
+  }
+  next()
+}
+
+async function canAccessDashboard(userId, role, dashboardId) {
+  if (!pool) return false
+  if (role === "super_admin") return true
+
+  const check = await pool.query(
+    `SELECT 1
+     FROM dashboard_access
+     WHERE dashboard_id = $1 AND user_id = $2
+     LIMIT 1`,
+    [dashboardId, userId]
+  )
+  return check.rowCount > 0
+}
+
+async function initDatabase() {
+  if (!pool) {
+    console.warn("DATABASE_URL ausente: recursos de login/banco desativados.")
+    return
+  }
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS app_users (
+      id BIGSERIAL PRIMARY KEY,
+      email TEXT UNIQUE NOT NULL,
+      password_hash TEXT,
+      role TEXT NOT NULL DEFAULT 'user',
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `)
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS dashboards (
+      id BIGSERIAL PRIMARY KEY,
+      name TEXT NOT NULL,
+      tenant_slug TEXT NOT NULL UNIQUE,
+      spreadsheet_id TEXT,
+      config JSONB NOT NULL DEFAULT '{}'::jsonb,
+      created_by BIGINT REFERENCES app_users(id) ON DELETE SET NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `)
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS dashboard_access (
+      id BIGSERIAL PRIMARY KEY,
+      dashboard_id BIGINT NOT NULL REFERENCES dashboards(id) ON DELETE CASCADE,
+      user_id BIGINT NOT NULL REFERENCES app_users(id) ON DELETE CASCADE,
+      access_role TEXT NOT NULL DEFAULT 'viewer',
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      UNIQUE (dashboard_id, user_id)
+    );
+  `)
+
+  const adminEmail = String(process.env.ADMIN_EMAIL || "").trim().toLowerCase()
+  const adminPassword = String(process.env.ADMIN_PASSWORD || "")
+  if (!adminEmail || !adminPassword) return
+
+  const existing = await pool.query(
+    "SELECT id FROM app_users WHERE email = $1 LIMIT 1",
+    [adminEmail]
+  )
+  if (existing.rowCount === 0) {
+    const hash = await bcrypt.hash(adminPassword, 10)
+    await pool.query(
+      "INSERT INTO app_users (email, password_hash, role) VALUES ($1, $2, 'super_admin')",
+      [adminEmail, hash]
+    )
+    console.log(`Admin inicial criado: ${adminEmail}`)
+  }
+}
+
 app.get("/api/health", (_req, res) => {
-  res.json({ ok: true })
+  res.json({ ok: true, db: Boolean(pool) })
+})
+
+app.post("/api/auth/login", async (req, res) => {
+  try {
+    if (!pool) {
+      return res
+        .status(503)
+        .json({ error: "Banco não configurado. Defina DATABASE_URL." })
+    }
+
+    const email = String(req.body?.email || "")
+      .trim()
+      .toLowerCase()
+    const password = String(req.body?.password || "")
+    if (!email || !password) {
+      return res.status(400).json({ error: "email e password são obrigatórios." })
+    }
+
+    const userRes = await pool.query(
+      "SELECT id, email, password_hash, role FROM app_users WHERE email = $1 LIMIT 1",
+      [email]
+    )
+    const user = userRes.rows[0]
+    if (!user?.password_hash) {
+      return res.status(401).json({ error: "Credenciais inválidas." })
+    }
+
+    const valid = await bcrypt.compare(password, user.password_hash)
+    if (!valid) {
+      return res.status(401).json({ error: "Credenciais inválidas." })
+    }
+
+    const token = signToken(user)
+    res.json({
+      token,
+      user: { id: user.id, email: user.email, role: user.role },
+    })
+  } catch (error) {
+    res.status(500).json({
+      error: "Falha no login.",
+      details: error?.message || String(error),
+    })
+  }
+})
+
+app.get("/api/auth/me", requireAuth, (req, res) => {
+  res.json({ user: req.user })
+})
+
+app.post("/api/admin/users", requireAuth, requireAdmin, async (req, res) => {
+  try {
+    if (!pool) return res.status(503).json({ error: "Banco não configurado." })
+
+    const email = String(req.body?.email || "")
+      .trim()
+      .toLowerCase()
+    const password = String(req.body?.password || "")
+    const role = req.body?.role === "super_admin" ? "super_admin" : "user"
+
+    if (!email || !password) {
+      return res.status(400).json({ error: "email e password são obrigatórios." })
+    }
+
+    const hash = await bcrypt.hash(password, 10)
+    const created = await pool.query(
+      `INSERT INTO app_users (email, password_hash, role)
+       VALUES ($1, $2, $3)
+       ON CONFLICT (email) DO UPDATE SET password_hash = EXCLUDED.password_hash, role = EXCLUDED.role
+       RETURNING id, email, role`,
+      [email, hash, role]
+    )
+    res.status(201).json({ user: created.rows[0] })
+  } catch (error) {
+    res.status(500).json({
+      error: "Falha ao criar usuário.",
+      details: error?.message || String(error),
+    })
+  }
+})
+
+app.get("/api/dashboards", requireAuth, async (req, res) => {
+  try {
+    if (!pool) return res.status(503).json({ error: "Banco não configurado." })
+
+    if (req.user.role === "super_admin") {
+      const list = await pool.query(
+        "SELECT id, name, tenant_slug, spreadsheet_id, config, created_at, updated_at FROM dashboards ORDER BY id DESC"
+      )
+      return res.json({ dashboards: list.rows })
+    }
+
+    const list = await pool.query(
+      `SELECT d.id, d.name, d.tenant_slug, d.spreadsheet_id, d.config, d.created_at, d.updated_at
+       FROM dashboards d
+       JOIN dashboard_access a ON a.dashboard_id = d.id
+       WHERE a.user_id = $1
+       ORDER BY d.id DESC`,
+      [req.user.sub]
+    )
+    res.json({ dashboards: list.rows })
+  } catch (error) {
+    res.status(500).json({
+      error: "Falha ao listar dashboards.",
+      details: error?.message || String(error),
+    })
+  }
+})
+
+app.post("/api/dashboards", requireAuth, requireAdmin, async (req, res) => {
+  try {
+    if (!pool) return res.status(503).json({ error: "Banco não configurado." })
+    const name = String(req.body?.name || "").trim()
+    const tenantSlug = String(req.body?.tenantSlug || "").trim()
+    const spreadsheetId = String(req.body?.spreadsheetId || "").trim()
+    const config = req.body?.config && typeof req.body.config === "object" ? req.body.config : {}
+
+    if (!name || !tenantSlug) {
+      return res.status(400).json({ error: "name e tenantSlug são obrigatórios." })
+    }
+
+    const created = await pool.query(
+      `INSERT INTO dashboards (name, tenant_slug, spreadsheet_id, config, created_by)
+       VALUES ($1, $2, $3, $4::jsonb, $5)
+       RETURNING id, name, tenant_slug, spreadsheet_id, config, created_at, updated_at`,
+      [name, tenantSlug, spreadsheetId || null, JSON.stringify(config), req.user.sub]
+    )
+    res.status(201).json({ dashboard: created.rows[0] })
+  } catch (error) {
+    res.status(500).json({
+      error: "Falha ao criar dashboard.",
+      details: error?.message || String(error),
+    })
+  }
+})
+
+app.put("/api/dashboards/:id", requireAuth, async (req, res) => {
+  try {
+    if (!pool) return res.status(503).json({ error: "Banco não configurado." })
+    const id = Number(req.params.id)
+    if (!id) return res.status(400).json({ error: "ID inválido." })
+
+    const hasAccess = await canAccessDashboard(req.user.sub, req.user.role, id)
+    if (!hasAccess) return res.status(403).json({ error: "Sem permissão para este dashboard." })
+
+    const name = String(req.body?.name || "").trim()
+    const spreadsheetId = String(req.body?.spreadsheetId || "").trim()
+    const config = req.body?.config && typeof req.body.config === "object" ? req.body.config : {}
+
+    const updated = await pool.query(
+      `UPDATE dashboards
+       SET name = COALESCE(NULLIF($1, ''), name),
+           spreadsheet_id = COALESCE(NULLIF($2, ''), spreadsheet_id),
+           config = $3::jsonb,
+           updated_at = NOW()
+       WHERE id = $4
+       RETURNING id, name, tenant_slug, spreadsheet_id, config, created_at, updated_at`,
+      [name, spreadsheetId, JSON.stringify(config), id]
+    )
+    if (updated.rowCount === 0) {
+      return res.status(404).json({ error: "Dashboard não encontrado." })
+    }
+
+    res.json({ dashboard: updated.rows[0] })
+  } catch (error) {
+    res.status(500).json({
+      error: "Falha ao atualizar dashboard.",
+      details: error?.message || String(error),
+    })
+  }
+})
+
+app.post("/api/dashboards/:id/access", requireAuth, requireAdmin, async (req, res) => {
+  try {
+    if (!pool) return res.status(503).json({ error: "Banco não configurado." })
+
+    const dashboardId = Number(req.params.id)
+    const email = String(req.body?.email || "")
+      .trim()
+      .toLowerCase()
+    const accessRole = req.body?.accessRole === "editor" ? "editor" : "viewer"
+    if (!dashboardId || !email) {
+      return res.status(400).json({ error: "id do dashboard e email são obrigatórios." })
+    }
+
+    let user = await pool.query(
+      "SELECT id, email, role FROM app_users WHERE email = $1 LIMIT 1",
+      [email]
+    )
+    if (user.rowCount === 0) {
+      user = await pool.query(
+        "INSERT INTO app_users (email, role) VALUES ($1, 'user') RETURNING id, email, role",
+        [email]
+      )
+    }
+
+    await pool.query(
+      `INSERT INTO dashboard_access (dashboard_id, user_id, access_role)
+       VALUES ($1, $2, $3)
+       ON CONFLICT (dashboard_id, user_id)
+       DO UPDATE SET access_role = EXCLUDED.access_role`,
+      [dashboardId, user.rows[0].id, accessRole]
+    )
+
+    res.status(201).json({
+      granted: true,
+      dashboardId,
+      user: user.rows[0],
+      accessRole,
+    })
+  } catch (error) {
+    res.status(500).json({
+      error: "Falha ao conceder acesso.",
+      details: error?.message || String(error),
+    })
+  }
 })
 
 app.get("/api/sheets/tabs", async (req, res) => {
@@ -125,6 +465,13 @@ app.get("/api/sheets/csv", async (req, res) => {
 
 app.use(express.static(__dirname))
 
-app.listen(port, () => {
-  console.log(`Dashboard white-label em http://localhost:${port}`)
-})
+initDatabase()
+  .then(() => {
+    app.listen(port, () => {
+      console.log(`Dashboard white-label em http://localhost:${port}`)
+    })
+  })
+  .catch((error) => {
+    console.error("Falha ao iniciar aplicação:", error?.message || error)
+    process.exit(1)
+  })

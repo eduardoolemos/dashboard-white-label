@@ -228,6 +228,12 @@ tbody td { padding:11px 12px; font-size:13px; color:var(--text); }
 .config-status { font-size:11px; color:var(--text2); margin-top:8px; min-height:14px; }
 .btn-load { width:100%; background:var(--teal); color:#030e0c; border:none; border-radius:8px; padding:13px; font-family:var(--font-head); font-size:14px; font-weight:700; text-transform:uppercase; letter-spacing:0.06em; cursor:pointer; transition:all 0.2s; margin-top:8px; }
 .btn-load:hover { background:var(--teal2); transform:translateY(-1px); }
+.auth-block { border:1px solid var(--border); border-radius:10px; padding:14px; background:var(--bg2); margin-bottom:14px; }
+.auth-row { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+.auth-row-3 { display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px; }
+.auth-actions { display:flex; gap:8px; flex-wrap:wrap; margin-top:8px; }
+.auth-status { font-size:11px; color:var(--text2); margin-top:8px; min-height:14px; }
+.header-user { font-family:var(--font-mono); font-size:10px; color:var(--text2); text-transform:uppercase; letter-spacing:0.08em; }
 .rule-setup-row { display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:10px; }
 .rule-setup-title { font-family:var(--font-mono); font-size:10px; text-transform:uppercase; letter-spacing:0.08em; color:var(--text2); }
 .modal-overlay { position:fixed; inset:0; background:rgba(3,8,16,0.72); z-index:500; display:none; align-items:center; justify-content:center; padding:20px; }
@@ -268,6 +274,8 @@ tbody td { padding:11px 12px; font-size:13px; color:var(--text); }
   </div>
   <div class="header-right">
     <div class="badge-live"><div class="dot"></div> Ao vivo</div>
+    <span class="header-user" id="headerUserInfo">não autenticado</span>
+    <button class="btn-refresh" id="btnLogout" style="display:none;" onclick="logoutDashboard()">Sair</button>
     <span class="last-update" id="lastUpdate">—</span>
     <button class="btn-refresh" onclick="loadAll()">
       <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
@@ -334,6 +342,47 @@ tbody td { padding:11px 12px; font-size:13px; color:var(--text); }
     <div class="config-panel">
       <div class="config-title">Configurar Planilha</div>
       <div class="config-sub">Use uma unica planilha Google com varias abas (paginas). Para modo privado, compartilhe a planilha com o e-mail da Service Account.</div>
+      <div class="auth-block">
+        <div class="stage-config-title">Autenticação</div>
+        <div class="auth-row">
+          <input class="funnel-input" id="authEmail" type="email" placeholder="E-mail">
+          <input class="funnel-input" id="authPassword" type="password" placeholder="Senha">
+        </div>
+        <div class="auth-actions">
+          <button class="btn-stage-add" type="button" onclick="loginDashboard()">Entrar</button>
+          <button class="btn-stage-remove" type="button" onclick="logoutDashboard()">Sair</button>
+        </div>
+        <div class="auth-status" id="authStatus"></div>
+      </div>
+
+      <div class="auth-block">
+        <div class="stage-config-title">Dashboard no Banco</div>
+        <div class="config-hint" style="margin-bottom:10px;">Selecione o dashboard liberado para seu usuário. As edições são salvas automaticamente.</div>
+        <select class="camp-select" id="dashboardSelect" onchange="onDashboardSelectionChange()" style="width:100%;">
+          <option value="">Selecione...</option>
+        </select>
+        <div class="auth-status" id="dashboardStatus"></div>
+      </div>
+
+      <div class="auth-block" id="adminPanel" style="display:none;">
+        <div class="stage-config-title">Admin: criar dashboard e permissões</div>
+        <div class="auth-row">
+          <input class="funnel-input" id="adminDashboardName" type="text" placeholder="Nome do dashboard">
+          <input class="funnel-input" id="adminTenantSlug" type="text" placeholder="tenant-slug">
+        </div>
+        <div class="auth-actions">
+          <button class="btn-stage-add" type="button" onclick="createDashboardAdmin()">Criar dashboard</button>
+        </div>
+        <div class="auth-row-3">
+          <input class="funnel-input" id="adminAccessEmail" type="email" placeholder="email@cliente.com">
+          <select class="camp-select" id="adminAccessRole">
+            <option value="viewer">viewer</option>
+            <option value="editor">editor</option>
+          </select>
+          <button class="btn-stage-add" type="button" onclick="grantDashboardAccessAdmin()">Liberar acesso</button>
+        </div>
+        <div class="auth-status" id="adminStatus"></div>
+      </div>
 
       <div class="config-steps">
         <div class="config-step">
@@ -945,6 +994,283 @@ function getCfgKey() {
 
 function getTrafficKey() {
   return `${TRAFFIC_KEY}:${CLIENT_KEY}`;
+}
+
+const AUTH_TOKEN_KEY = 'dash_auth_token_v1';
+let AUTH_TOKEN = localStorage.getItem(AUTH_TOKEN_KEY) || '';
+let AUTH_USER = null;
+let DASHBOARDS = [];
+let ACTIVE_DASHBOARD_ID = null;
+let REMOTE_SYNC_PAUSED = false;
+let remoteSaveTimer = null;
+
+function setStatus(id, text, isError = false) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.style.color = isError ? 'var(--red)' : 'var(--text2)';
+  el.textContent = text || '';
+}
+
+function updateHeaderAuthUi() {
+  const userInfo = document.getElementById('headerUserInfo');
+  const btnLogout = document.getElementById('btnLogout');
+  if (userInfo) userInfo.textContent = AUTH_USER?.email || 'não autenticado';
+  if (btnLogout) btnLogout.style.display = AUTH_TOKEN ? 'inline-flex' : 'none';
+}
+
+function getRole() {
+  return AUTH_USER?.role || 'user';
+}
+
+function apiPath(path) {
+  return path.startsWith('/api/') ? path : `/api/${String(path || '').replace(/^\/+/, '')}`;
+}
+
+async function apiRequest(path, options = {}) {
+  const headers = { ...(options.headers || {}) };
+  if (!headers['Content-Type'] && options.body !== undefined) {
+    headers['Content-Type'] = 'application/json';
+  }
+  if (AUTH_TOKEN) headers.Authorization = `Bearer ${AUTH_TOKEN}`;
+  const res = await fetch(apiPath(path), {
+    ...options,
+    headers,
+    body: options.body !== undefined && typeof options.body !== 'string'
+      ? JSON.stringify(options.body)
+      : options.body
+  });
+  const text = await res.text();
+  let data = {};
+  try { data = text ? JSON.parse(text) : {}; } catch {}
+  if (!res.ok) throw new Error(data?.error || `Erro HTTP ${res.status}`);
+  return data;
+}
+
+function applyRoleUi() {
+  const isAdmin = getRole() === 'super_admin';
+  const adminPanel = document.getElementById('adminPanel');
+  if (adminPanel) adminPanel.style.display = isAdmin ? 'block' : 'none';
+
+  const tabPesquisa = document.querySelector('.tab[onclick="switchTab(\'pesquisa\')"]');
+  const tabConfig = document.querySelector('.tab[onclick="switchTab(\'config\')"]');
+  if (tabPesquisa) tabPesquisa.style.display = isAdmin ? '' : 'none';
+  if (tabConfig) tabConfig.style.display = isAdmin ? '' : 'none';
+  if (!isAdmin && (currentTab === 'config' || currentTab === 'pesquisa')) {
+    switchTab('conversoes');
+  }
+}
+
+function renderDashboardSelect() {
+  const sel = document.getElementById('dashboardSelect');
+  if (!sel) return;
+  sel.innerHTML = '<option value="">Selecione...</option>' +
+    DASHBOARDS.map((d) => `<option value="${d.id}">${d.name} (${d.tenant_slug})</option>`).join('');
+  if (ACTIVE_DASHBOARD_ID) sel.value = String(ACTIVE_DASHBOARD_ID);
+}
+
+function getCurrentConfigState() {
+  return {
+    sheetId: SHEET_ID,
+    publishedBase: PUBLISHED_BASE,
+    metricsSheetId: METRICS_SHEET_ID,
+    metricsPublishedBase: METRICS_PUBLISHED_BASE,
+    brandName: BRAND_NAME,
+    surveyConfig: SURVEY_CONFIG,
+    gidEtapas: GID_ETAPAS,
+    gidConv: GID_CONV,
+    gidAds: GID_ADS,
+    metricRules: METRIC_RULES,
+    stageConfigs: STAGE_CONFIGS,
+    activeFunnelId,
+    funnels: FUNNELS
+  };
+}
+
+async function scheduleRemoteSave() {
+  if (!AUTH_TOKEN || !ACTIVE_DASHBOARD_ID || REMOTE_SYNC_PAUSED) return;
+  if (remoteSaveTimer) clearTimeout(remoteSaveTimer);
+  remoteSaveTimer = setTimeout(async () => {
+    try {
+      await apiRequest(`/dashboards/${ACTIVE_DASHBOARD_ID}`, {
+        method: 'PUT',
+        body: {
+          name: DASHBOARDS.find((d) => String(d.id) === String(ACTIVE_DASHBOARD_ID))?.name || BRAND_NAME,
+          spreadsheetId: METRICS_SHEET_ID || SHEET_ID,
+          config: getCurrentConfigState()
+        }
+      });
+      setStatus('dashboardStatus', 'Configuração salva no banco.');
+    } catch (error) {
+      setStatus('dashboardStatus', `Falha ao salvar no banco: ${error.message}`, true);
+    }
+  }, 700);
+}
+
+function applyConfigObject(c = {}) {
+  if (c.sheetId !== undefined) SHEET_ID = String(c.sheetId || '');
+  if (c.publishedBase !== undefined) PUBLISHED_BASE = String(c.publishedBase || PUBLISHED_BASE);
+  if (c.metricsSheetId !== undefined) METRICS_SHEET_ID = String(c.metricsSheetId || '');
+  if (c.metricsPublishedBase !== undefined) METRICS_PUBLISHED_BASE = String(c.metricsPublishedBase || METRICS_PUBLISHED_BASE);
+  if (c.gidEtapas !== undefined) GID_ETAPAS = String(c.gidEtapas || '');
+  if (c.gidConv !== undefined) GID_CONV = String(c.gidConv || '');
+  if (c.gidAds !== undefined) GID_ADS = String(c.gidAds || '');
+  if (c.brandName !== undefined) BRAND_NAME = String(c.brandName || 'Evolving');
+  if (c.surveyConfig && typeof c.surveyConfig === 'object') SURVEY_CONFIG = normalizeSurveyConfig(c.surveyConfig);
+  if (c.metricRules && typeof c.metricRules === 'object') {
+    METRIC_RULES = {
+      lead: resolveMetricRule(c.metricRules.lead || {}, DEFAULT_METRIC_RULES.lead),
+      mql: resolveMetricRule(c.metricRules.mql || {}, DEFAULT_METRIC_RULES.mql),
+      agendada: resolveMetricRule(c.metricRules.agendada || {}, DEFAULT_METRIC_RULES.agendada),
+      confirmada: resolveMetricRule(c.metricRules.confirmada || {}, DEFAULT_METRIC_RULES.confirmada),
+      noShow: resolveMetricRule(c.metricRules.noShow || {}, DEFAULT_METRIC_RULES.noShow),
+      callFeita: resolveMetricRule(c.metricRules.callFeita || {}, DEFAULT_METRIC_RULES.callFeita)
+    };
+  }
+  if (Array.isArray(c.stageConfigs) && c.stageConfigs.length) {
+    STAGE_CONFIGS = c.stageConfigs.map((s) => ({ name: String(s?.name || ''), gid: String(s?.gid || '') }));
+  }
+  if (Array.isArray(c.funnels) && c.funnels.length) {
+    FUNNELS = c.funnels.map((f, i) => ({
+      id: String(f?.id || `funnel_${i + 1}`),
+      name: String(f?.name || `Página ${i + 1}`),
+      gidEtapas: String(f?.gidEtapas || ''),
+      gidConv: String(f?.gidConv || ''),
+      gidAds: String(f?.gidAds || ''),
+      funnelType: String(f?.funnelType || 'sessao_estrategica'),
+      defaultCampContains: String(f?.defaultCampContains || ''),
+      stageConfigs: Array.isArray(f?.stageConfigs) ? f.stageConfigs.map((s) => ({ name: String(s?.name || ''), gid: String(s?.gid || '') })) : DEFAULT_STAGE_CONFIGS.map((s) => ({ ...s }))
+    }));
+  }
+  if (c.activeFunnelId) activeFunnelId = String(c.activeFunnelId);
+
+  EXPORT_BASE = SHEET_ID ? `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv` : '';
+  if (!METRICS_SHEET_ID) METRICS_SHEET_ID = SHEET_ID;
+  if (!METRICS_PUBLISHED_BASE) METRICS_PUBLISHED_BASE = PUBLISHED_BASE;
+  METRICS_EXPORT_BASE = METRICS_SHEET_ID ? `https://docs.google.com/spreadsheets/d/${METRICS_SHEET_ID}/export?format=csv` : '';
+
+  if (!FUNNELS.length) {
+    FUNNELS = [{
+      id: 'default',
+      name: 'Principal',
+      gidEtapas: GID_ETAPAS,
+      gidConv: GID_CONV,
+      gidAds: GID_ADS,
+      defaultCampContains: '',
+      funnelType: 'sessao_estrategica',
+      stageConfigs: STAGE_CONFIGS.map((s) => ({ ...s }))
+    }];
+  }
+}
+
+async function refreshDashboards() {
+  if (!AUTH_TOKEN) return;
+  const data = await apiRequest('/dashboards');
+  DASHBOARDS = Array.isArray(data?.dashboards) ? data.dashboards : [];
+  renderDashboardSelect();
+}
+
+async function onDashboardSelectionChange() {
+  const sel = document.getElementById('dashboardSelect');
+  const selectedId = String(sel?.value || '');
+  if (!selectedId) return;
+  const dashboard = DASHBOARDS.find((d) => String(d.id) === selectedId);
+  if (!dashboard) return;
+
+  ACTIVE_DASHBOARD_ID = selectedId;
+  REMOTE_SYNC_PAUSED = true;
+  applyConfigObject(dashboard.config || {});
+  applyActiveFunnelToGlobals();
+  renderFunnelSelectors();
+  fillConfigInputsFromGlobals();
+  fillSurveyConfigInputs();
+  applyBranding();
+  persistConfigState();
+  REMOTE_SYNC_PAUSED = false;
+  setStatus('dashboardStatus', `Dashboard carregado: ${dashboard.name}`);
+  await loadAll();
+}
+
+async function loginDashboard() {
+  try {
+    const email = String(document.getElementById('authEmail')?.value || '').trim().toLowerCase();
+    const password = String(document.getElementById('authPassword')?.value || '');
+    if (!email || !password) throw new Error('Informe e-mail e senha.');
+    const data = await apiRequest('/auth/login', { method: 'POST', body: { email, password } });
+    AUTH_TOKEN = String(data?.token || '');
+    AUTH_USER = data?.user || null;
+    localStorage.setItem(AUTH_TOKEN_KEY, AUTH_TOKEN);
+    updateHeaderAuthUi();
+    applyRoleUi();
+    setStatus('authStatus', `Autenticado como ${AUTH_USER?.email || ''}`);
+    await refreshDashboards();
+    const tenant = getTenantFromUrl();
+    const matched = DASHBOARDS.find((d) => normalizeClientKey(d.tenant_slug) === tenant) || DASHBOARDS[0];
+    if (matched) {
+      ACTIVE_DASHBOARD_ID = String(matched.id);
+      renderDashboardSelect();
+      await onDashboardSelectionChange();
+    } else {
+      setStatus('dashboardStatus', 'Nenhum dashboard disponível para este usuário.', true);
+      switchTab('config');
+    }
+  } catch (error) {
+    setStatus('authStatus', `Falha no login: ${error.message}`, true);
+  }
+}
+
+function logoutDashboard() {
+  AUTH_TOKEN = '';
+  AUTH_USER = null;
+  DASHBOARDS = [];
+  ACTIVE_DASHBOARD_ID = null;
+  localStorage.removeItem(AUTH_TOKEN_KEY);
+  updateHeaderAuthUi();
+  applyRoleUi();
+  renderDashboardSelect();
+  setStatus('authStatus', 'Sessão encerrada.');
+  setStatus('dashboardStatus', 'Faça login para carregar dashboards.', true);
+  document.getElementById('loadingScreen').style.display = 'none';
+  switchTab('config');
+}
+
+async function createDashboardAdmin() {
+  try {
+    const name = String(document.getElementById('adminDashboardName')?.value || '').trim();
+    const tenantSlug = normalizeClientKey(document.getElementById('adminTenantSlug')?.value || '');
+    if (!name || !tenantSlug) throw new Error('Informe nome e tenant slug.');
+    const created = await apiRequest('/dashboards', {
+      method: 'POST',
+      body: {
+        name,
+        tenantSlug,
+        spreadsheetId: METRICS_SHEET_ID || SHEET_ID,
+        config: getCurrentConfigState()
+      }
+    });
+    setStatus('adminStatus', `Dashboard criado: ${created?.dashboard?.name || name}`);
+    document.getElementById('adminTenantSlug').value = tenantSlug;
+    await refreshDashboards();
+    ACTIVE_DASHBOARD_ID = String(created?.dashboard?.id || '');
+    renderDashboardSelect();
+  } catch (error) {
+    setStatus('adminStatus', `Falha ao criar dashboard: ${error.message}`, true);
+  }
+}
+
+async function grantDashboardAccessAdmin() {
+  try {
+    if (!ACTIVE_DASHBOARD_ID) throw new Error('Selecione um dashboard.');
+    const email = String(document.getElementById('adminAccessEmail')?.value || '').trim().toLowerCase();
+    const accessRole = String(document.getElementById('adminAccessRole')?.value || 'viewer');
+    if (!email) throw new Error('Informe um e-mail.');
+    await apiRequest(`/dashboards/${ACTIVE_DASHBOARD_ID}/access`, {
+      method: 'POST',
+      body: { email, accessRole }
+    });
+    setStatus('adminStatus', `Acesso liberado para ${email}.`);
+  } catch (error) {
+    setStatus('adminStatus', `Falha ao liberar acesso: ${error.message}`, true);
+  }
 }
 
 function resolveMetricRule(raw, fallback) {
@@ -1717,6 +2043,9 @@ METRICS_EXPORT_BASE = METRICS_SHEET_ID ? `https://docs.google.com/spreadsheets/d
 
 // ── TAB ────────────────────────────────
 function switchTab(tab) {
+  if ((tab === 'config' || tab === 'pesquisa') && getRole() !== 'super_admin') {
+    tab = 'conversoes';
+  }
   currentTab = tab;
   const tabs = ['funil','conversoes','trafego','pesquisa','config'];
   document.querySelectorAll('.tab').forEach((t,i) => {
@@ -1763,24 +2092,12 @@ function syncGlobalsToActiveFunnel() {
 }
 
 function persistConfigState() {
+  const payload = getCurrentConfigState();
   try {
-    localStorage.setItem(getCfgKey(), JSON.stringify({
-      sheetId: SHEET_ID,
-      publishedBase: PUBLISHED_BASE,
-      metricsSheetId: METRICS_SHEET_ID,
-      metricsPublishedBase: METRICS_PUBLISHED_BASE,
-      brandName: BRAND_NAME,
-      surveyConfig: SURVEY_CONFIG,
-      gidEtapas: GID_ETAPAS,
-      gidConv: GID_CONV,
-      gidAds: GID_ADS,
-      metricRules: METRIC_RULES,
-      stageConfigs: STAGE_CONFIGS,
-      activeFunnelId,
-      funnels: FUNNELS
-    }));
+    localStorage.setItem(getCfgKey(), JSON.stringify(payload));
     writeSharedCfgToUrl(buildSharePayload());
   } catch {}
+  scheduleRemoteSave();
 }
 
 function renderFunnelSelectors() {
@@ -4726,8 +5043,43 @@ fillConfigInputsFromGlobals();
 fillSurveyConfigInputs();
 applyBranding();
 writeSharedCfgToUrl(buildSharePayload());
+updateHeaderAuthUi();
+applyRoleUi();
+setStatus('dashboardStatus', 'Faça login para carregar dashboards.', true);
 
-loadAll();
+async function bootstrapAuth() {
+  if (!AUTH_TOKEN) {
+    document.getElementById('loadingScreen').style.display = 'none';
+    switchTab('config');
+    return;
+  }
+  try {
+    const me = await apiRequest('/auth/me');
+    AUTH_USER = me?.user || null;
+    updateHeaderAuthUi();
+    applyRoleUi();
+    await refreshDashboards();
+    const tenant = getTenantFromUrl();
+    const matched = DASHBOARDS.find((d) => normalizeClientKey(d.tenant_slug) === tenant) || DASHBOARDS[0];
+    if (!matched) {
+      setStatus('dashboardStatus', 'Nenhum dashboard liberado para o seu usuário.', true);
+      document.getElementById('loadingScreen').style.display = 'none';
+      switchTab('config');
+      return;
+    }
+    ACTIVE_DASHBOARD_ID = String(matched.id);
+    renderDashboardSelect();
+    await onDashboardSelectionChange();
+  } catch (error) {
+    AUTH_TOKEN = '';
+    localStorage.removeItem(AUTH_TOKEN_KEY);
+    setStatus('authStatus', `Sessão inválida: ${error.message}`, true);
+    document.getElementById('loadingScreen').style.display = 'none';
+    switchTab('config');
+  }
+}
+
+bootstrapAuth();
 </script>
 </body>
 </html>

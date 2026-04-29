@@ -11,6 +11,13 @@ Permitir conectar planilhas **privadas** sem expor dados publicamente.
 - Front (`index.html`) continua com a interface e métricas.
 - Backend (`server.js`) faz leitura autenticada da Google Sheets API.
 - Endpoints:
+  - `POST /api/auth/login`
+  - `GET /api/auth/me`
+  - `POST /api/admin/users`
+  - `GET /api/dashboards`
+  - `POST /api/dashboards`
+  - `PUT /api/dashboards/:id`
+  - `POST /api/dashboards/:id/access`
   - `GET /api/sheets/tabs?spreadsheetId=...`
   - `GET /api/sheets/csv?spreadsheetId=...&gid=...`
 - Configuração é isolada por tenant via `?tenant=slug`.
@@ -20,6 +27,10 @@ Permitir conectar planilhas **privadas** sem expor dados publicamente.
 1. Instale dependências:
    - `npm install`
 2. Copie `.env.example` para `.env` e preencha:
+   - `JWT_SECRET`
+   - `ADMIN_EMAIL`
+   - `ADMIN_PASSWORD`
+   - `DATABASE_URL`
    - `GOOGLE_SERVICE_ACCOUNT_EMAIL`
    - `GOOGLE_PRIVATE_KEY` (com `\n` escapado)
 3. Compartilhe a planilha com o e-mail da Service Account (leitor).
@@ -33,6 +44,14 @@ Permitir conectar planilhas **privadas** sem expor dados publicamente.
 - Cole o link normal da planilha (`https://docs.google.com/spreadsheets/d/<id>/...`).
 - Clique em **Buscar GIDs automático**.
 - Clique em **Carregar Dashboard**.
+
+## Login e dashboards por acesso
+
+- Faça login na aba **Config** com o usuário admin (`ADMIN_EMAIL`/`ADMIN_PASSWORD`).
+- Crie dashboards com `nome` e `tenant slug`.
+- Libere acesso por e-mail para cada dashboard.
+- Usuários comuns veem apenas dashboards autorizados.
+- Alterações de configuração são persistidas no banco automaticamente.
 
 ## Padrao de planilha (unica)
 
