@@ -297,6 +297,27 @@ tbody td { padding:11px 12px; font-size:13px; color:var(--text); }
   </div>
 </div>
 
+<div id="passwordChangeModal" class="modal-overlay">
+  <div class="tutorial-box" style="width:min(520px,95vw);">
+    <div class="tutorial-title">Defina uma nova senha</div>
+    <div class="tutorial-text">Por segurança, troque a senha padrão antes de continuar.</div>
+    <div class="config-field">
+      <label>Senha atual</label>
+      <input class="funnel-input" id="pwdCurrent" type="password" placeholder="Senha que você usou para entrar">
+    </div>
+    <div class="config-field">
+      <label>Nova senha</label>
+      <input class="funnel-input" id="pwdNew" type="password" placeholder="Mínimo 8 caracteres">
+    </div>
+    <div class="config-field">
+      <label>Confirmar nova senha</label>
+      <input class="funnel-input" id="pwdNew2" type="password" placeholder="Repita a nova senha">
+    </div>
+    <div class="auth-status" id="pwdChangeStatus"></div>
+    <button class="btn-load" type="button" onclick="submitPasswordChange()">Salvar e continuar</button>
+  </div>
+</div>
+
 <div id="appShell" class="app-shell">
 <div class="header">
   <div class="logo">
@@ -1087,6 +1108,7 @@ function showLoginScreen() {
   const shell = document.getElementById('appShell');
   if (login) login.style.display = 'flex';
   if (shell) shell.style.display = 'none';
+  closePasswordChangeModal();
 }
 
 function showAppShell() {
@@ -1094,6 +1116,67 @@ function showAppShell() {
   const shell = document.getElementById('appShell');
   if (login) login.style.display = 'none';
   if (shell) shell.style.display = 'block';
+}
+
+function openPasswordChangeModal() {
+  const modal = document.getElementById('passwordChangeModal');
+  if (modal) modal.style.display = 'flex';
+  const cur = document.getElementById('pwdCurrent');
+  const n1 = document.getElementById('pwdNew');
+  const n2 = document.getElementById('pwdNew2');
+  if (n1) n1.value = '';
+  if (n2) n2.value = '';
+  if (cur) {
+    cur.value = String(document.getElementById('authPassword')?.value || '');
+    cur.focus();
+  }
+  setStatus('pwdChangeStatus', '');
+}
+
+function closePasswordChangeModal() {
+  const modal = document.getElementById('passwordChangeModal');
+  if (modal) modal.style.display = 'none';
+}
+
+async function submitPasswordChange() {
+  try {
+    const currentPassword = String(document.getElementById('pwdCurrent')?.value || '');
+    const newPassword = String(document.getElementById('pwdNew')?.value || '');
+    const newPassword2 = String(document.getElementById('pwdNew2')?.value || '');
+    if (!currentPassword || !newPassword) throw new Error('Preencha senha atual e nova senha.');
+    if (newPassword !== newPassword2) throw new Error('Confirmação da nova senha não confere.');
+    if (newPassword.length < 8) throw new Error('Nova senha deve ter pelo menos 8 caracteres.');
+    const data = await apiRequest('/auth/password', {
+      method: 'PUT',
+      body: { currentPassword, newPassword }
+    });
+    AUTH_TOKEN = String(data?.token || AUTH_TOKEN);
+    AUTH_USER = data?.user || AUTH_USER;
+    localStorage.setItem(AUTH_TOKEN_KEY, AUTH_TOKEN);
+    closePasswordChangeModal();
+    await continueSessionAfterLogin();
+  } catch (error) {
+    setStatus('pwdChangeStatus', error.message || String(error), true);
+  }
+}
+
+async function continueSessionAfterLogin() {
+  updateHeaderAuthUi();
+  applyRoleUi();
+  setStatus('authStatus', `Autenticado como ${AUTH_USER?.email || ''}`);
+  await refreshDashboards();
+  const tenant = getTenantFromUrl();
+  const matched = DASHBOARDS.find((d) => normalizeClientKey(d.tenant_slug) === tenant) || DASHBOARDS[0];
+  if (matched) {
+    ACTIVE_DASHBOARD_ID = String(matched.id);
+    renderDashboardSelect();
+    await onDashboardSelectionChange();
+    maybeShowTutorialOnLogin();
+  } else {
+    setStatus('dashboardStatus', 'Nenhum dashboard disponível para este usuário.', true);
+    switchTab('config');
+    maybeShowTutorialOnLogin();
+  }
 }
 
 function getRole() {
@@ -1198,6 +1281,7 @@ function openTutorial() {
 
 function maybeShowTutorialOnLogin() {
   if (!AUTH_USER) return;
+  if (AUTH_USER?.mustChangePassword) return;
   if (getTutorialHidePreference()) return;
   openTutorial();
 }
@@ -1406,23 +1490,15 @@ async function loginDashboard() {
     AUTH_TOKEN = String(data?.token || '');
     AUTH_USER = data?.user || null;
     localStorage.setItem(AUTH_TOKEN_KEY, AUTH_TOKEN);
-    showAppShell();
-    updateHeaderAuthUi();
-    applyRoleUi();
-    setStatus('authStatus', `Autenticado como ${AUTH_USER?.email || ''}`);
-    await refreshDashboards();
-    const tenant = getTenantFromUrl();
-    const matched = DASHBOARDS.find((d) => normalizeClientKey(d.tenant_slug) === tenant) || DASHBOARDS[0];
-    if (matched) {
-      ACTIVE_DASHBOARD_ID = String(matched.id);
-      renderDashboardSelect();
-      await onDashboardSelectionChange();
-      maybeShowTutorialOnLogin();
-    } else {
-      setStatus('dashboardStatus', 'Nenhum dashboard disponível para este usuário.', true);
-      switchTab('config');
-      maybeShowTutorialOnLogin();
+    const mustChange = Boolean(data?.mustChangePassword || AUTH_USER?.mustChangePassword);
+    if (mustChange) {
+      showLoginScreen();
+      openPasswordChangeModal();
+      setStatus('authStatus', 'Troque a senha padrão para continuar.');
+      return;
     }
+    showAppShell();
+    await continueSessionAfterLogin();
   } catch (error) {
     setStatus('authStatus', `Falha no login: ${error.message}`, true);
   }
@@ -1473,11 +1549,15 @@ async function grantDashboardAccessAdmin() {
     const email = String(document.getElementById('adminAccessEmail')?.value || '').trim().toLowerCase();
     const accessRole = String(document.getElementById('adminAccessRole')?.value || 'viewer');
     if (!email) throw new Error('Informe um e-mail.');
-    await apiRequest(`/dashboards/${ACTIVE_DASHBOARD_ID}/access`, {
+    const res = await apiRequest(`/dashboards/${ACTIVE_DASHBOARD_ID}/access`, {
       method: 'POST',
       body: { email, accessRole }
     });
-    setStatus('adminStatus', `Acesso liberado para ${email}.`);
+    if (res?.appliedDefaultPassword && res?.defaultPassword) {
+      setStatus('adminStatus', `Acesso liberado para ${email}. Senha padrão (primeiro login): ${res.defaultPassword}`);
+    } else {
+      setStatus('adminStatus', `Acesso liberado para ${email}.`);
+    }
   } catch (error) {
     setStatus('adminStatus', `Falha ao liberar acesso: ${error.message}`, true);
   }
@@ -5638,6 +5718,14 @@ async function bootstrapAuth() {
   try {
     const me = await apiRequest('/auth/me');
     AUTH_USER = me?.user || null;
+    const mustChange = Boolean(AUTH_USER?.mustChangePassword);
+    if (mustChange) {
+      showLoginScreen();
+      openPasswordChangeModal();
+      setStatus('authStatus', 'Troque a senha padrão para continuar.');
+      document.getElementById('loadingScreen').style.display = 'none';
+      return;
+    }
     showAppShell();
     updateHeaderAuthUi();
     applyRoleUi();

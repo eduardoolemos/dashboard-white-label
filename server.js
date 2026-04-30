@@ -70,10 +70,21 @@ function toCsv(rows = []) {
 
 function signToken(user) {
   return jwt.sign(
-    { sub: user.id, role: user.role, email: user.email },
+    {
+      sub: user.id,
+      role: user.role,
+      email: user.email,
+      mustChangePassword: Boolean(user.must_change_password),
+    },
     jwtSecret,
     { expiresIn: "7d" }
   )
+}
+
+function getDefaultInvitePassword() {
+  const fromEnv = String(process.env.DEFAULT_USER_PASSWORD || "").trim()
+  if (fromEnv) return fromEnv
+  return "MudarSenha_Arven_2026!"
 }
 
 function getTokenFromRequest(req) {
@@ -131,8 +142,14 @@ async function initDatabase() {
       email TEXT UNIQUE NOT NULL,
       password_hash TEXT,
       role TEXT NOT NULL DEFAULT 'user',
+      must_change_password BOOLEAN NOT NULL DEFAULT FALSE,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
+  `)
+
+  await pool.query(`
+    ALTER TABLE app_users
+    ADD COLUMN IF NOT EXISTS must_change_password BOOLEAN NOT NULL DEFAULT FALSE;
   `)
 
   await pool.query(`
@@ -198,7 +215,7 @@ app.post("/api/auth/login", async (req, res) => {
     }
 
     const userRes = await pool.query(
-      "SELECT id, email, password_hash, role FROM app_users WHERE email = $1 LIMIT 1",
+      "SELECT id, email, password_hash, role, must_change_password FROM app_users WHERE email = $1 LIMIT 1",
       [email]
     )
     const user = userRes.rows[0]
@@ -214,7 +231,13 @@ app.post("/api/auth/login", async (req, res) => {
     const token = signToken(user)
     res.json({
       token,
-      user: { id: user.id, email: user.email, role: user.role },
+      mustChangePassword: Boolean(user.must_change_password),
+      user: {
+        id: user.id,
+        email: user.email,
+        role: user.role,
+        mustChangePassword: Boolean(user.must_change_password),
+      },
     })
   } catch (error) {
     res.status(500).json({
@@ -224,8 +247,93 @@ app.post("/api/auth/login", async (req, res) => {
   }
 })
 
-app.get("/api/auth/me", requireAuth, (req, res) => {
-  res.json({ user: req.user })
+app.get("/api/auth/me", requireAuth, async (req, res) => {
+  try {
+    if (!pool) return res.status(503).json({ error: "Banco não configurado." })
+    const id = Number(req.user?.sub)
+    if (!id) return res.status(400).json({ error: "Sessão inválida." })
+
+    const userRes = await pool.query(
+      "SELECT id, email, role, must_change_password FROM app_users WHERE id = $1 LIMIT 1",
+      [id]
+    )
+    const row = userRes.rows[0]
+    if (!row) return res.status(404).json({ error: "Usuário não encontrado." })
+
+    res.json({
+      user: {
+        id: row.id,
+        email: row.email,
+        role: row.role,
+        mustChangePassword: Boolean(row.must_change_password),
+      },
+    })
+  } catch (error) {
+    res.status(500).json({
+      error: "Falha ao carregar usuário.",
+      details: error?.message || String(error),
+    })
+  }
+})
+
+app.put("/api/auth/password", requireAuth, async (req, res) => {
+  try {
+    if (!pool) return res.status(503).json({ error: "Banco não configurado." })
+
+    const id = Number(req.user?.sub)
+    const currentPassword = String(req.body?.currentPassword || "")
+    const newPassword = String(req.body?.newPassword || "")
+    if (!id || !currentPassword || !newPassword) {
+      return res.status(400).json({
+        error: "currentPassword e newPassword são obrigatórios.",
+      })
+    }
+    if (newPassword.length < 8) {
+      return res.status(400).json({ error: "Nova senha deve ter pelo menos 8 caracteres." })
+    }
+
+    const userRes = await pool.query(
+      "SELECT id, email, role, password_hash, must_change_password FROM app_users WHERE id = $1 LIMIT 1",
+      [id]
+    )
+    const row = userRes.rows[0]
+    if (!row?.password_hash) {
+      return res.status(400).json({ error: "Usuário sem senha configurada." })
+    }
+
+    const validCurrent = await bcrypt.compare(currentPassword, row.password_hash)
+    if (!validCurrent) {
+      return res.status(401).json({ error: "Senha atual incorreta." })
+    }
+
+    const newHash = await bcrypt.hash(newPassword, 10)
+    const updated = await pool.query(
+      `UPDATE app_users
+       SET password_hash = $1,
+           must_change_password = FALSE
+       WHERE id = $2
+       RETURNING id, email, role, must_change_password`,
+      [newHash, id]
+    )
+
+    const user = updated.rows[0]
+    const token = signToken(user)
+    res.json({
+      token,
+      mustChangePassword: false,
+      user: {
+        id: user.id,
+        email: user.email,
+        role: user.role,
+        mustChangePassword: false,
+      },
+    })
+  } catch (error) {
+    res.status(500).json({
+      error: "Falha ao atualizar senha.",
+      details: error?.message || String(error),
+    })
+  }
 })
 
 app.post("/api/admin/users", requireAuth, requireAdmin, async (req, res) => {
@@ -244,9 +352,9 @@ app.post("/api/admin/users", requireAuth, requireAdmin, async (req, res) => {
 
     const hash = await bcrypt.hash(password, 10)
     const created = await pool.query(
-      `INSERT INTO app_users (email, password_hash, role)
-       VALUES ($1, $2, $3)
-       ON CONFLICT (email) DO UPDATE SET password_hash = EXCLUDED.password_hash, role = EXCLUDED.role
+      `INSERT INTO app_users (email, password_hash, role, must_change_password)
+       VALUES ($1, $2, $3, FALSE)
+       ON CONFLICT (email) DO UPDATE SET password_hash = EXCLUDED.password_hash, role = EXCLUDED.role, must_change_password = FALSE
        RETURNING id, email, role`,
       [email, hash, role]
     )
@@ -364,14 +472,32 @@ app.post("/api/dashboards/:id/access", requireAuth, requireAdmin, async (req, re
     }
 
     let user = await pool.query(
-      "SELECT id, email, role FROM app_users WHERE email = $1 LIMIT 1",
+      "SELECT id, email, role, password_hash, must_change_password FROM app_users WHERE email = $1 LIMIT 1",
       [email]
     )
+    let appliedDefaultPassword = false
     if (user.rowCount === 0) {
+      const defaultPw = getDefaultInvitePassword()
+      const hash = await bcrypt.hash(defaultPw, 10)
       user = await pool.query(
-        "INSERT INTO app_users (email, role) VALUES ($1, 'user') RETURNING id, email, role",
-        [email]
+        `INSERT INTO app_users (email, password_hash, role, must_change_password)
+         VALUES ($1, $2, 'user', TRUE)
+         RETURNING id, email, role, password_hash, must_change_password`,
+        [email, hash]
       )
+      appliedDefaultPassword = true
+    } else if (!user.rows[0]?.password_hash) {
+      const defaultPw = getDefaultInvitePassword()
+      const hash = await bcrypt.hash(defaultPw, 10)
+      user = await pool.query(
+        `UPDATE app_users
+         SET password_hash = $2,
+             must_change_password = TRUE
+         WHERE email = $1
+         RETURNING id, email, role, password_hash, must_change_password`,
+        [email, hash]
+      )
+      appliedDefaultPassword = true
     }
 
     await pool.query(
@@ -385,8 +511,18 @@ app.post("/api/dashboards/:id/access", requireAuth, requireAdmin, async (req, re
     res.status(201).json({
       granted: true,
       dashboardId,
-      user: user.rows[0],
+      user: {
+        id: user.rows[0].id,
+        email: user.rows[0].email,
+        role: user.rows[0].role,
+      },
       accessRole,
+      appliedDefaultPassword,
+      defaultPassword: appliedDefaultPassword ? getDefaultInvitePassword() : null,
+      hint:
+        appliedDefaultPassword
+          ? "Senha padrão aplicada: o usuário deve trocar no primeiro login."
+          : "Usuário já possuía senha; apenas permissões atualizadas.",
     })
   } catch (error) {
     res.status(500).json({
