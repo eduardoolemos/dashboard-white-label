@@ -400,6 +400,7 @@ tbody td { padding:11px 12px; font-size:13px; color:var(--text); }
 
   <div id="configScreen" style="display:none; max-width:820px; margin:40px auto;">
     <div class="config-panel">
+<<<<<<< HEAD
       <div class="config-title">Configurações</div>
       <div class="config-sub">Planilha, equipe e link compartilhável do dashboard.</div>
 
@@ -419,6 +420,15 @@ tbody td { padding:11px 12px; font-size:13px; color:var(--text); }
         </select>
         <div class="auth-status" id="dashboardStatus"></div>
       </div>
+=======
+      <div class="config-title">Configurar Planilha</div>
+      <div class="config-sub">Use uma unica planilha Google com varias abas (paginas). Para modo privado, compartilhe a planilha com o e-mail da Service Account.</div>
+      <div style="display:flex;gap:8px;margin-bottom:14px;">
+        <button type="button" class="period-tab active" id="cfgTabPlanilha" onclick="switchConfigView('planilha')">Planilha</button>
+        <button type="button" class="period-tab" id="cfgTabDashboards" onclick="switchConfigView('dashboards')">Dashboards</button>
+      </div>
+      <div id="configPlanilhaSection">
+>>>>>>> 5103a19 (Add admin dashboards view with status and users modal.)
 
       <div class="config-steps">
         <div class="config-step">
@@ -513,6 +523,7 @@ tbody td { padding:11px 12px; font-size:13px; color:var(--text); }
       <div class="config-status" id="autoGidStatus"></div>
       <button class="btn-load" onclick="saveConfigAndLoad()">Carregar Dashboard →</button>
       </div>
+<<<<<<< HEAD
 
       <div id="configSectionUsers" class="config-section" style="display:none;">
         <div class="config-section-title">Gestão de usuários</div>
@@ -555,6 +566,15 @@ tbody td { padding:11px 12px; font-size:13px; color:var(--text); }
         </div>
       </div>
 
+=======
+      <div id="configDashboardsSection" style="display:none;">
+        <div class="stage-config-wrap" style="margin-top:0;">
+          <div class="stage-config-title">Gestão de Dashboards</div>
+          <div class="config-hint" style="margin-bottom:10px;">Admin visualiza todos os dashboards, status e última sincronização.</div>
+          <div id="dashboardAdminList"></div>
+        </div>
+      </div>
+>>>>>>> 5103a19 (Add admin dashboards view with status and users modal.)
     </div>
   </div>
 
@@ -597,6 +617,7 @@ tbody td { padding:11px 12px; font-size:13px; color:var(--text); }
     </div>
   </div>
 
+<<<<<<< HEAD
   <div id="tutorialModal" class="modal-overlay">
     <div class="tutorial-box">
       <div class="tutorial-progress" id="tutorialProgress">Passo 1 de 1</div>
@@ -613,6 +634,22 @@ tbody td { padding:11px 12px; font-size:13px; color:var(--text); }
           <button type="button" class="btn-modal-close" onclick="skipTutorial()">Pular</button>
           <button type="button" class="btn-stage-add" id="tutorialNextBtn" onclick="nextTutorialStep()">Próximo</button>
         </div>
+=======
+  <div id="dashboardUsersModal" class="modal-overlay" onclick="onDashboardUsersOverlayClick(event)">
+    <div class="modal-box" style="max-width:780px;">
+      <div class="modal-head">
+        <div>
+          <div class="modal-title" id="dashboardUsersModalTitle">Usuários do dashboard</div>
+          <div class="modal-sub">Usuários ativos e permissões</div>
+        </div>
+        <button type="button" class="btn-modal-close" onclick="closeDashboardUsersModal()">Fechar</button>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>E-mail</th><th>Permissão</th><th>Status</th></tr></thead>
+          <tbody id="dashboardUsersModalBody"></tbody>
+        </table>
+>>>>>>> 5103a19 (Add admin dashboards view with status and users modal.)
       </div>
     </div>
   </div>
@@ -2010,6 +2047,9 @@ try {
       gidConv: String(f.gidConv || ''),
       gidAds: String(f.gidAds || ''),
       funnelType: String(f.funnelType || 'sessao_estrategica'),
+      isActive: f.isActive !== false,
+      lastSyncAt: String(f.lastSyncAt || ''),
+      users: Array.isArray(f.users) ? f.users : [],
       defaultCampContains: String(f.defaultCampContains || ''),
       defaultCampMode: normalizePatternMode(f.defaultCampMode || 'contains'),
       defaultCampRules: normalizeCampaignPatternRules(f.defaultCampRules || []),
@@ -2040,6 +2080,9 @@ if (!FUNNELS.length) {
     gidConv: GID_CONV,
     gidAds: GID_ADS,
     funnelType: 'sessao_estrategica',
+    isActive: true,
+    lastSyncAt: '',
+    users: [],
     defaultCampContains: '',
     defaultCampMode: 'contains',
     defaultCampRules: [],
@@ -2277,7 +2320,10 @@ function buildSharePayload() {
     String(f?.defaultCampContains || ''),
     String(normalizePatternMode(f?.defaultCampMode || 'contains')),
     packStages(f?.stageConfigs || []),
-    String(f?.funnelType || 'sessao_estrategica')
+    String(f?.funnelType || 'sessao_estrategica'),
+    f?.isActive !== false ? 1 : 0,
+    String(f?.lastSyncAt || ''),
+    JSON.stringify(Array.isArray(f?.users) ? f.users : [])
   ]));
   return {
     v: 2,
@@ -2389,6 +2435,7 @@ try {
     gidConv: String(f?.[3] || ''),
     gidAds: String(f?.[4] || ''),
     defaultCampContains: String(f?.[5] || ''),
+<<<<<<< HEAD
     defaultCampMode: Array.isArray(f?.[6]) ? 'contains' : normalizePatternMode(f?.[6] || 'contains'),
     defaultCampRules: Array.isArray(f?.[6])
       ? []
@@ -2401,6 +2448,13 @@ try {
     funnelType: Array.isArray(f?.[6])
       ? String(f?.[7] || 'sessao_estrategica')
       : String((Array.isArray(f?.[7]) && (!f[7]?.[0] || Array.isArray(f[7][0]))) ? f?.[8] : f?.[9] || 'sessao_estrategica')
+=======
+    stageConfigs: Array.isArray(f?.[6]) ? unpackStages(f[6]) : DEFAULT_STAGE_CONFIGS.map(s => ({ ...s })),
+    funnelType: String(f?.[7] || 'sessao_estrategica'),
+    isActive: Number(f?.[8]) !== 0,
+    lastSyncAt: String(f?.[9] || ''),
+    users: (() => { try { return JSON.parse(f?.[10] || '[]'); } catch { return []; } })()
+>>>>>>> 5103a19 (Add admin dashboards view with status and users modal.)
   }));
 
   if (shared?.v === 2 && Array.isArray(shared?.c)) {
@@ -2521,6 +2575,9 @@ try {
         gidConv: String(f.gidConv || ''),
         gidAds: String(f.gidAds || ''),
         funnelType: String(f.funnelType || 'sessao_estrategica'),
+        isActive: f.isActive !== false,
+        lastSyncAt: String(f.lastSyncAt || ''),
+        users: Array.isArray(f.users) ? f.users : [],
         defaultCampContains: String(f.defaultCampContains || ''),
         defaultCampMode: normalizePatternMode(f.defaultCampMode || 'contains'),
         stageConfigs: Array.isArray(f.stageConfigs) ? f.stageConfigs.map(s => ({
@@ -2588,6 +2645,99 @@ function switchTab(tab) {
   }
 }
 
+function switchConfigView(view) {
+  const next = view === 'dashboards' ? 'dashboards' : 'planilha';
+  const plan = document.getElementById('configPlanilhaSection');
+  const dash = document.getElementById('configDashboardsSection');
+  const tabPlan = document.getElementById('cfgTabPlanilha');
+  const tabDash = document.getElementById('cfgTabDashboards');
+  if (plan) plan.style.display = next === 'planilha' ? 'block' : 'none';
+  if (dash) dash.style.display = next === 'dashboards' ? 'block' : 'none';
+  if (tabPlan) tabPlan.classList.toggle('active', next === 'planilha');
+  if (tabDash) tabDash.classList.toggle('active', next === 'dashboards');
+  if (next === 'dashboards') renderDashboardAdminList();
+}
+
+function fmtSyncDate(v) {
+  const raw = String(v || '').trim();
+  if (!raw) return 'Nunca';
+  const d = new Date(raw);
+  if (Number.isNaN(d.getTime())) return 'Nunca';
+  return d.toLocaleString('pt-BR');
+}
+
+function ensureFunnelAdminMeta() {
+  FUNNELS = (FUNNELS || []).map((f) => ({
+    ...f,
+    isActive: f?.isActive !== false,
+    lastSyncAt: String(f?.lastSyncAt || ''),
+    users: Array.isArray(f?.users) ? f.users : []
+  }));
+}
+
+function toggleDashboardActive(funnelId, checked) {
+  const idx = FUNNELS.findIndex(f => f.id === funnelId);
+  if (idx < 0) return;
+  FUNNELS[idx] = { ...FUNNELS[idx], isActive: !!checked };
+  persistConfigState();
+  renderDashboardAdminList();
+}
+
+function renderDashboardAdminList() {
+  ensureFunnelAdminMeta();
+  const host = document.getElementById('dashboardAdminList');
+  if (!host) return;
+  if (!FUNNELS.length) {
+    host.innerHTML = '<div class="config-hint">Nenhum dashboard cadastrado.</div>';
+    return;
+  }
+  host.innerHTML = FUNNELS.map((f) => `
+    <div class="stage-row" style="grid-template-columns:1.2fr auto auto auto;align-items:center;margin-bottom:8px;">
+      <div style="display:flex;flex-direction:column;gap:3px;">
+        <span style="font-family:var(--font-mono);font-size:11px;color:var(--white);">${String(f.name || 'Dashboard')}</span>
+        <span style="font-family:var(--font-mono);font-size:10px;color:var(--text2);">Última sincronização: ${fmtSyncDate(f.lastSyncAt)}</span>
+      </div>
+      <label class="toggle-switch" style="margin-left:0;">
+        <input type="checkbox" ${f.isActive !== false ? 'checked' : ''} onchange="toggleDashboardActive('${f.id}', this.checked)">
+        <span class="toggle-track"><span class="toggle-thumb"></span></span>
+        <span class="toggle-label">${f.isActive !== false ? 'Ativo' : 'Inativo'}</span>
+      </label>
+      <button class="btn-stage-add" type="button" onclick="openDashboardUsersModal('${f.id}')">Usuários</button>
+      <span style="font-family:var(--font-mono);font-size:10px;color:var(--text2);">${Array.isArray(f.users) ? f.users.length : 0} usuários</span>
+    </div>
+  `).join('');
+}
+
+function openDashboardUsersModal(funnelId) {
+  const f = FUNNELS.find(x => x.id === funnelId);
+  if (!f) return;
+  const title = document.getElementById('dashboardUsersModalTitle');
+  const body = document.getElementById('dashboardUsersModalBody');
+  const modal = document.getElementById('dashboardUsersModal');
+  if (title) title.textContent = `Usuários do dashboard: ${f.name || 'Dashboard'}`;
+  const users = Array.isArray(f.users) ? f.users : [];
+  if (body) {
+    body.innerHTML = users.length ? users.map((u) => `
+      <tr>
+        <td>${u.email || '—'}</td>
+        <td>${u.permission || 'viewer'}</td>
+        <td>${u.active === false ? 'Inativo' : 'Ativo'}</td>
+      </tr>
+    `).join('') : '<tr><td colspan="3" style="text-align:center;color:var(--text2);padding:18px;">Nenhum usuário vinculado.</td></tr>';
+  }
+  if (modal) modal.style.display = 'flex';
+}
+
+function closeDashboardUsersModal() {
+  const modal = document.getElementById('dashboardUsersModal');
+  if (modal) modal.style.display = 'none';
+}
+
+function onDashboardUsersOverlayClick(e) {
+  const modal = document.getElementById('dashboardUsersModal');
+  if (e?.target === modal) closeDashboardUsersModal();
+}
+
 function getActiveFunnel() {
   return FUNNELS.find(f => f.id === activeFunnelId) || FUNNELS[0];
 }
@@ -2651,6 +2801,7 @@ function renderFunnelSelectors() {
 }
 
 function fillConfigInputsFromGlobals() {
+  ensureFunnelAdminMeta();
   const brandNameInput = document.getElementById('brandNameInput');
   if (brandNameInput) brandNameInput.value = BRAND_NAME;
   const metricsLinkInput = document.getElementById('sheetLinkConfig');
@@ -2696,6 +2847,7 @@ function fillConfigInputsFromGlobals() {
     if (paid) paid.checked = rule.requirePaidCampaign !== false;
   });
   renderStageConfigs();
+  renderDashboardAdminList();
 }
 
 function fillSurveyConfigInputs() {
@@ -3278,6 +3430,9 @@ function addFunnelPage() {
     gidConv: '',
     gidAds: '',
     funnelType: 'sessao_estrategica',
+    isActive: true,
+    lastSyncAt: '',
+    users: [],
     defaultCampContains: '',
     defaultCampMode: 'contains',
     defaultCampRules: [],
@@ -3663,6 +3818,11 @@ async function loadAll() {
 
     document.getElementById('lastUpdate').textContent =
       'Atualizado ' + new Date().toLocaleTimeString('pt-BR');
+    const idx = FUNNELS.findIndex(f => f.id === activeFunnelId);
+    if (idx >= 0) {
+      FUNNELS[idx] = { ...FUNNELS[idx], lastSyncAt: new Date().toISOString() };
+      persistConfigState();
+    }
 
     document.getElementById('loadingScreen').style.display = 'none';
     switchTab(currentTab === 'config' ? 'conversoes' : currentTab);
