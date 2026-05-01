@@ -422,6 +422,29 @@ app.post("/api/dashboards", requireAuth, requireAdmin, async (req, res) => {
   }
 })
 
+app.get("/api/admin/dashboards/:id/users", requireAuth, requireAdmin, async (req, res) => {
+  try {
+    if (!pool) return res.status(503).json({ error: "Banco não configurado." })
+    const id = Number(req.params.id)
+    if (!id) return res.status(400).json({ error: "ID inválido." })
+
+    const result = await pool.query(
+      `SELECT u.id, u.email, u.role, a.access_role, u.must_change_password
+       FROM dashboard_access a
+       JOIN app_users u ON u.id = a.user_id
+       WHERE a.dashboard_id = $1
+       ORDER BY u.email ASC`,
+      [id]
+    )
+    res.json({ users: result.rows })
+  } catch (error) {
+    res.status(500).json({
+      error: "Falha ao listar usuários do dashboard.",
+      details: error?.message || String(error),
+    })
+  }
+})
+
 app.put("/api/dashboards/:id", requireAuth, async (req, res) => {
   try {
     if (!pool) return res.status(503).json({ error: "Banco não configurado." })

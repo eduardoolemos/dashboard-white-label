@@ -2667,48 +2667,45 @@ function toggleDashboardActive(funnelId, checked) {
 }
 
 function renderDashboardAdminList() {
-  ensureFunnelAdminMeta();
   const host = document.getElementById('dashboardAdminList');
   if (!host) return;
-  if (!FUNNELS.length) {
+  if (!DASHBOARDS.length) {
     host.innerHTML = '<div class="config-hint">Nenhum dashboard cadastrado.</div>';
     return;
   }
-  host.innerHTML = FUNNELS.map((f) => `
-    <div class="stage-row" style="grid-template-columns:1.2fr auto auto auto;align-items:center;margin-bottom:8px;">
+  host.innerHTML = DASHBOARDS.map((d) => `
+    <div class="stage-row" style="grid-template-columns:1fr auto auto;align-items:center;margin-bottom:8px;gap:8px;">
       <div style="display:flex;flex-direction:column;gap:3px;">
-        <span style="font-family:var(--font-mono);font-size:11px;color:var(--white);">${String(f.name || 'Dashboard')}</span>
-        <span style="font-family:var(--font-mono);font-size:10px;color:var(--text2);">Última sincronização: ${fmtSyncDate(f.lastSyncAt)}</span>
+        <span style="font-family:var(--font-mono);font-size:11px;color:var(--white);">${String(d.name || 'Dashboard')}</span>
+        <span style="font-family:var(--font-mono);font-size:10px;color:var(--text2);">${d.tenant_slug}</span>
       </div>
-      <label class="toggle-switch" style="margin-left:0;">
-        <input type="checkbox" ${f.isActive !== false ? 'checked' : ''} onchange="toggleDashboardActive('${f.id}', this.checked)">
-        <span class="toggle-track"><span class="toggle-thumb"></span></span>
-        <span class="toggle-label">${f.isActive !== false ? 'Ativo' : 'Inativo'}</span>
-      </label>
-      <button class="btn-stage-add" type="button" onclick="openDashboardUsersModal('${f.id}')">Usuários</button>
-      <span style="font-family:var(--font-mono);font-size:10px;color:var(--text2);">${Array.isArray(f.users) ? f.users.length : 0} usuários</span>
+      <button class="btn-stage-add" type="button" onclick="openDashboardUsersModal(${d.id}, '${String(d.name || '').replace(/'/g, "\\'")}')">Usuários</button>
     </div>
   `).join('');
 }
 
-function openDashboardUsersModal(funnelId) {
-  const f = FUNNELS.find(x => x.id === funnelId);
-  if (!f) return;
+async function openDashboardUsersModal(dashboardId, dashboardName) {
   const title = document.getElementById('dashboardUsersModalTitle');
   const body = document.getElementById('dashboardUsersModalBody');
   const modal = document.getElementById('dashboardUsersModal');
-  if (title) title.textContent = `Usuários do dashboard: ${f.name || 'Dashboard'}`;
-  const users = Array.isArray(f.users) ? f.users : [];
-  if (body) {
-    body.innerHTML = users.length ? users.map((u) => `
-      <tr>
-        <td>${u.email || '—'}</td>
-        <td>${u.permission || 'viewer'}</td>
-        <td>${u.active === false ? 'Inativo' : 'Ativo'}</td>
-      </tr>
-    `).join('') : '<tr><td colspan="3" style="text-align:center;color:var(--text2);padding:18px;">Nenhum usuário vinculado.</td></tr>';
-  }
+  if (title) title.textContent = `Usuários — ${dashboardName || 'Dashboard'}`;
+  if (body) body.innerHTML = '<tr><td colspan="3" style="text-align:center;color:var(--text2);padding:18px;">Carregando...</td></tr>';
   if (modal) modal.style.display = 'flex';
+  try {
+    const data = await apiRequest(`/admin/dashboards/${dashboardId}/users`);
+    const users = Array.isArray(data?.users) ? data.users : [];
+    if (body) {
+      body.innerHTML = users.length ? users.map((u) => `
+        <tr>
+          <td>${u.email || '—'}</td>
+          <td><span style="font-family:var(--font-mono);font-size:11px;">${u.access_role === 'editor' ? 'Editor' : 'Visualizador'}</span></td>
+          <td>${u.must_change_password ? '<span style="color:var(--warn,#f59e0b);">Primeiro login pendente</span>' : '<span style="color:var(--green,#22c55e);">Ativo</span>'}</td>
+        </tr>
+      `).join('') : '<tr><td colspan="3" style="text-align:center;color:var(--text2);padding:18px;">Nenhum usuário vinculado.</td></tr>';
+    }
+  } catch (err) {
+    if (body) body.innerHTML = `<tr><td colspan="3" style="text-align:center;color:var(--danger,#ef4444);padding:18px;">Erro ao carregar: ${err.message}</td></tr>`;
+  }
 }
 
 function closeDashboardUsersModal() {
