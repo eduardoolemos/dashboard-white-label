@@ -506,7 +506,16 @@ tbody td { padding:11px 12px; font-size:13px; color:var(--text); }
         <div class="stage-config-title">Etapas do processo (nome + GID da aba)</div>
         <div class="config-hint" style="margin-bottom:10px;">Adicione, edite e remova etapas conforme o funil do cliente.</div>
         <div class="stage-config-list" id="stageConfigList"></div>
-        <button type="button" class="btn-stage-add" onclick="addStageConfig()">+ Adicionar etapa</button>
+        <button type="button" class="btn-stage-add" onclick="toggleStagePicker()">+ Adicionar etapa</button>
+        <div id="stagePicker" style="display:none;margin-top:10px;padding:12px;background:var(--bg2);border:1px solid var(--border);border-radius:8px;">
+          <div style="font-family:var(--font-mono);font-size:10px;color:var(--text2);text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px;">Etapas predefinidas</div>
+          <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px;" id="stagePickerOptions"></div>
+          <div style="display:flex;gap:6px;align-items:center;margin-top:6px;">
+            <input class="funnel-input" id="stagePickerCustom" type="text" placeholder="Nome personalizado..." style="flex:1;" onkeydown="if(event.key==='Enter')addStageFromPicker()">
+            <button class="btn-stage-add" type="button" onclick="addStageFromPicker()">Adicionar</button>
+            <button class="btn-ghost" type="button" onclick="toggleStagePicker()">Fechar</button>
+          </div>
+        </div>
       </div>
       <button type="button" class="btn-ghost" onclick="applySpreadsheetStandard()">Aplicar padrão (planilha unica com abas)</button>
       <button type="button" class="btn-ghost" id="btnAutoGid" onclick="autoFillGidsFromSheet()">Buscar GIDs automático</button>
@@ -3563,13 +3572,23 @@ function removeFunnelPage() {
   persistConfigState();
 }
 
+const PRESET_STAGES = [
+  'Leads', 'Entrada (Typebot)', 'Qualificado', 'Desqualificado',
+  'Contato de Confirmação', 'Call Confirmada', 'Pós-Call', 'No-Show',
+  'Call Feita', 'Reunião Agendada', 'Proposta Enviada', 'Negociação',
+  'Fechado', 'Cancelado', 'Reativação'
+];
+
 function renderStageConfigs() {
   const host = document.getElementById('stageConfigList');
   if (!host) return;
+  const last = STAGE_CONFIGS.length - 1;
   host.innerHTML = STAGE_CONFIGS.map((s, i) => `
-    <div class="stage-row">
+    <div class="stage-row" style="grid-template-columns:1fr 1fr auto auto auto;gap:6px;">
       <input type="text" value="${(s.name || '').replace(/"/g, '&quot;')}" placeholder="Nome da etapa" onchange="onStageConfigChange(${i}, 'name', this.value)">
       <input type="text" value="${(s.gid || '').replace(/"/g, '&quot;')}" placeholder="GID da aba" onchange="onStageConfigChange(${i}, 'gid', this.value)">
+      <button class="btn-ghost" style="padding:4px 8px;font-size:13px;" title="Mover para cima" ${i === 0 ? 'disabled' : ''} onclick="moveStageConfig(${i}, -1)">↑</button>
+      <button class="btn-ghost" style="padding:4px 8px;font-size:13px;" title="Mover para baixo" ${i === last ? 'disabled' : ''} onclick="moveStageConfig(${i}, 1)">↓</button>
       <button class="btn-stage-remove" onclick="removeStageConfig(${i})">Excluir</button>
     </div>
   `).join('');
@@ -3580,6 +3599,53 @@ function onStageConfigChange(index, field, value) {
   STAGE_CONFIGS[index][field] = String(value || '').trim();
   syncGlobalsToActiveFunnel();
   persistConfigState();
+}
+
+function moveStageConfig(index, dir) {
+  const target = index + dir;
+  if (target < 0 || target >= STAGE_CONFIGS.length) return;
+  [STAGE_CONFIGS[index], STAGE_CONFIGS[target]] = [STAGE_CONFIGS[target], STAGE_CONFIGS[index]];
+  renderStageConfigs();
+  syncGlobalsToActiveFunnel();
+  persistConfigState();
+}
+
+function toggleStagePicker() {
+  const picker = document.getElementById('stagePicker');
+  if (!picker) return;
+  const open = picker.style.display !== 'none';
+  picker.style.display = open ? 'none' : 'block';
+  if (!open) {
+    const existing = new Set(STAGE_CONFIGS.map(s => s.name.trim().toLowerCase()));
+    const opts = document.getElementById('stagePickerOptions');
+    if (opts) opts.innerHTML = PRESET_STAGES.map(name => {
+      const used = existing.has(name.toLowerCase());
+      return `<button type="button" class="btn-ghost" style="font-size:11px;padding:4px 10px;opacity:${used ? '.4' : '1'};"
+        onclick="addPresetStage('${name.replace(/'/g, "\\'")}')">${name}${used ? ' ✓' : ''}</button>`;
+    }).join('');
+    document.getElementById('stagePickerCustom')?.focus();
+  }
+}
+
+function addPresetStage(name) {
+  if (!name) return;
+  STAGE_CONFIGS.push({ name, gid: '' });
+  renderStageConfigs();
+  syncGlobalsToActiveFunnel();
+  persistConfigState();
+  toggleStagePicker();
+}
+
+function addStageFromPicker() {
+  const inp = document.getElementById('stagePickerCustom');
+  const name = String(inp?.value || '').trim();
+  if (!name) return;
+  STAGE_CONFIGS.push({ name, gid: '' });
+  if (inp) inp.value = '';
+  renderStageConfigs();
+  syncGlobalsToActiveFunnel();
+  persistConfigState();
+  toggleStagePicker();
 }
 
 function addStageConfig() {
