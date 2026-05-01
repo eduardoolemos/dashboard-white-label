@@ -482,6 +482,35 @@ app.put("/api/dashboards/:id", requireAuth, async (req, res) => {
   }
 })
 
+app.put("/api/admin/dashboards/:dashboardId/users/:userId", requireAuth, requireAdmin, async (req, res) => {
+  try {
+    if (!pool) return res.status(503).json({ error: "Banco não configurado." })
+    const dashboardId = Number(req.params.dashboardId)
+    const userId = Number(req.params.userId)
+    if (!dashboardId || !userId) return res.status(400).json({ error: "IDs inválidos." })
+
+    const accessRole = req.body?.accessRole
+    const systemRole = req.body?.systemRole
+
+    if (accessRole !== undefined) {
+      const role = accessRole === "editor" ? "editor" : "viewer"
+      await pool.query(
+        `UPDATE dashboard_access SET access_role = $1 WHERE dashboard_id = $2 AND user_id = $3`,
+        [role, dashboardId, userId]
+      )
+    }
+
+    if (systemRole !== undefined) {
+      const role = systemRole === "super_admin" ? "super_admin" : "user"
+      await pool.query(`UPDATE app_users SET role = $1 WHERE id = $2`, [role, userId])
+    }
+
+    res.json({ ok: true })
+  } catch (error) {
+    res.status(500).json({ error: "Falha ao atualizar permissão.", details: error?.message || String(error) })
+  }
+})
+
 app.post("/api/dashboards/:id/access", requireAuth, requireAdmin, async (req, res) => {
   try {
     if (!pool) return res.status(503).json({ error: "Banco não configurado." })

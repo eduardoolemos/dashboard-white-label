@@ -2796,6 +2796,20 @@ async function addUserFromModal() {
   }
 }
 
+async function updateUserPermission(dashboardId, userId, value) {
+  const statusEl = document.getElementById('dashUsersAddStatus');
+  const body = value === 'super_admin'
+    ? { systemRole: 'super_admin' }
+    : { accessRole: value, systemRole: 'user' };
+  try {
+    await apiRequest(`/admin/dashboards/${dashboardId}/users/${userId}`, { method: 'PUT', body });
+    if (statusEl) { statusEl.style.color = 'var(--green,#22c55e)'; statusEl.textContent = 'Permissão atualizada.'; }
+  } catch (err) {
+    if (statusEl) { statusEl.style.color = 'var(--danger,#ef4444)'; statusEl.textContent = `Erro: ${err.message}`; }
+    await reloadDashboardUsersModal();
+  }
+}
+
 async function reloadDashboardUsersModal() {
   const body = document.getElementById('dashboardUsersModalBody');
   if (!body || !_dashUsersModalId) return;
@@ -2806,7 +2820,14 @@ async function reloadDashboardUsersModal() {
     body.innerHTML = users.length ? users.map((u) => `
       <tr>
         <td>${u.email || '—'}</td>
-        <td><span style="font-family:var(--font-mono);font-size:11px;">${u.access_role === 'editor' ? 'Editor' : 'Visualizador'}</span></td>
+        <td>
+          <select class="camp-select" style="font-size:11px;padding:4px 8px;"
+            onchange="updateUserPermission(${_dashUsersModalId}, ${u.id}, this.value)">
+            <option value="viewer" ${u.access_role !== 'editor' && u.role !== 'super_admin' ? 'selected' : ''}>Visualizador</option>
+            <option value="editor" ${u.access_role === 'editor' ? 'selected' : ''}>Editor</option>
+            <option value="super_admin" ${u.role === 'super_admin' ? 'selected' : ''}>Administrador</option>
+          </select>
+        </td>
         <td>${u.must_change_password ? '<span style="color:var(--warn,#f59e0b);">Primeiro login pendente</span>' : '<span style="color:var(--green,#22c55e);">Ativo</span>'}</td>
       </tr>
     `).join('') : '<tr><td colspan="3" style="text-align:center;color:var(--text2);padding:18px;">Nenhum usuário vinculado.</td></tr>';
