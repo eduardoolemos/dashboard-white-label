@@ -633,6 +633,15 @@ tbody td { padding:11px 12px; font-size:13px; color:var(--text); }
         </div>
         <button type="button" class="btn-modal-close" onclick="closeDashboardUsersModal()">Fechar</button>
       </div>
+      <div style="display:flex;gap:8px;align-items:center;padding:12px 0 4px;">
+        <input class="funnel-input" id="dashUsersAddEmail" type="email" placeholder="email@cliente.com" style="flex:1;">
+        <select class="camp-select" id="dashUsersAddRole" style="width:130px;">
+          <option value="viewer">Visualizador</option>
+          <option value="editor">Editor</option>
+        </select>
+        <button class="btn-stage-add" type="button" onclick="addUserFromModal()">Adicionar</button>
+      </div>
+      <div class="auth-status" id="dashUsersAddStatus" style="margin-bottom:6px;min-height:14px;"></div>
       <div class="table-wrap">
         <table>
           <thead><tr><th>E-mail</th><th>Permissão</th><th>Status</th></tr></thead>
@@ -2722,7 +2731,14 @@ async function confirmRenameDashboard(id) {
   }
 }
 
+let _dashUsersModalId = null;
+
 async function openDashboardUsersModal(dashboardId, dashboardName) {
+  _dashUsersModalId = dashboardId;
+  const emailInp = document.getElementById('dashUsersAddEmail');
+  const statusEl = document.getElementById('dashUsersAddStatus');
+  if (emailInp) emailInp.value = '';
+  if (statusEl) statusEl.textContent = '';
   const title = document.getElementById('dashboardUsersModalTitle');
   const body = document.getElementById('dashboardUsersModalBody');
   const modal = document.getElementById('dashboardUsersModal');
@@ -2747,8 +2763,56 @@ async function openDashboardUsersModal(dashboardId, dashboardName) {
 }
 
 function closeDashboardUsersModal() {
+  _dashUsersModalId = null;
   const modal = document.getElementById('dashboardUsersModal');
   if (modal) modal.style.display = 'none';
+}
+
+async function addUserFromModal() {
+  const email = String(document.getElementById('dashUsersAddEmail')?.value || '').trim().toLowerCase();
+  const accessRole = String(document.getElementById('dashUsersAddRole')?.value || 'viewer');
+  const statusEl = document.getElementById('dashUsersAddStatus');
+  if (!email) { if (statusEl) { statusEl.textContent = 'Informe o e-mail.'; statusEl.style.color = 'var(--danger, #ef4444)'; } return; }
+  if (!_dashUsersModalId) return;
+  const btn = document.querySelector('#dashboardUsersModal .btn-stage-add');
+  if (btn) { btn.disabled = true; btn.textContent = 'Adicionando...'; }
+  try {
+    const res = await apiRequest(`/dashboards/${_dashUsersModalId}/access`, {
+      method: 'POST',
+      body: { email, accessRole }
+    });
+    if (statusEl) {
+      statusEl.style.color = 'var(--green, #22c55e)';
+      statusEl.textContent = res?.appliedDefaultPassword
+        ? `Usuário criado. Senha padrão: ${res.defaultPassword}`
+        : `Acesso liberado para ${email}.`;
+    }
+    document.getElementById('dashUsersAddEmail').value = '';
+    await reloadDashboardUsersModal();
+  } catch (err) {
+    if (statusEl) { statusEl.style.color = 'var(--danger, #ef4444)'; statusEl.textContent = `Erro: ${err.message}`; }
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = 'Adicionar'; }
+  }
+}
+
+async function reloadDashboardUsersModal() {
+  const body = document.getElementById('dashboardUsersModalBody');
+  if (!body || !_dashUsersModalId) return;
+  body.innerHTML = '<tr><td colspan="3" style="text-align:center;color:var(--text2);padding:18px;">Carregando...</td></tr>';
+  try {
+    const data = await apiRequest(`/admin/dashboards/${_dashUsersModalId}/users`);
+    const users = Array.isArray(data?.users) ? data.users : [];
+    body.innerHTML = users.length ? users.map((u) => `
+      <tr>
+        <td>${u.email || '—'}</td>
+        <td><span style="font-family:var(--font-mono);font-size:11px;">${u.access_role === 'editor' ? 'Editor' : 'Visualizador'}</span></td>
+        <td>${u.must_change_password ? '<span style="color:var(--warn,#f59e0b);">Primeiro login pendente</span>' : '<span style="color:var(--green,#22c55e);">Ativo</span>'}</td>
+      </tr>
+    `).join('') : '<tr><td colspan="3" style="text-align:center;color:var(--text2);padding:18px;">Nenhum usuário vinculado.</td></tr>';
+  } catch (err) {
+    body.innerHTML = `<tr><td colspan="3" style="text-align:center;color:var(--danger,#ef4444);padding:18px;">Erro ao carregar: ${err.message}</td></tr>`;
+  }
 }
 
 function onDashboardUsersOverlayClick(e) {
