@@ -2674,14 +2674,42 @@ function renderDashboardAdminList() {
     return;
   }
   host.innerHTML = DASHBOARDS.map((d) => `
-    <div class="stage-row" style="grid-template-columns:1fr auto auto;align-items:center;margin-bottom:8px;gap:8px;">
+    <div id="dash-row-${d.id}" class="stage-row" style="grid-template-columns:1fr auto auto;align-items:center;margin-bottom:8px;gap:8px;">
       <div style="display:flex;flex-direction:column;gap:3px;">
         <span style="font-family:var(--font-mono);font-size:11px;color:var(--white);">${String(d.name || 'Dashboard')}</span>
         <span style="font-family:var(--font-mono);font-size:10px;color:var(--text2);">${d.tenant_slug}</span>
       </div>
+      <button class="btn-ghost" type="button" onclick="startRenameDashboard(${d.id}, '${String(d.name || '').replace(/'/g, "\\'")}')">Renomear</button>
       <button class="btn-stage-add" type="button" onclick="openDashboardUsersModal(${d.id}, '${String(d.name || '').replace(/'/g, "\\'")}')">Usuários</button>
     </div>
   `).join('');
+}
+
+function startRenameDashboard(id, currentName) {
+  const row = document.getElementById(`dash-row-${id}`);
+  if (!row) return;
+  row.innerHTML = `
+    <input class="funnel-input" id="rename-input-${id}" type="text" value="${String(currentName).replace(/"/g, '&quot;')}" style="flex:1;">
+    <button class="btn-stage-add" type="button" onclick="confirmRenameDashboard(${id})">Salvar</button>
+    <button class="btn-ghost" type="button" onclick="renderDashboardAdminList()">Cancelar</button>
+  `;
+  const inp = document.getElementById(`rename-input-${id}`);
+  if (inp) { inp.focus(); inp.select(); inp.addEventListener('keydown', (e) => { if (e.key === 'Enter') confirmRenameDashboard(id); if (e.key === 'Escape') renderDashboardAdminList(); }); }
+}
+
+async function confirmRenameDashboard(id) {
+  const inp = document.getElementById(`rename-input-${id}`);
+  const name = String(inp?.value || '').trim();
+  if (!name) return;
+  try {
+    await apiRequest(`/dashboards/${id}`, { method: 'PUT', body: { name } });
+    const idx = DASHBOARDS.findIndex(d => String(d.id) === String(id));
+    if (idx >= 0) DASHBOARDS[idx] = { ...DASHBOARDS[idx], name };
+    renderDashboardAdminList();
+  } catch (err) {
+    setStatus('adminStatus', `Erro ao renomear: ${err.message}`, true);
+    renderDashboardAdminList();
+  }
 }
 
 async function openDashboardUsersModal(dashboardId, dashboardName) {
