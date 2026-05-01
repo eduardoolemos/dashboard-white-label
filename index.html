@@ -2708,7 +2708,13 @@ async function confirmRenameDashboard(id) {
     const updatedName = res?.dashboard?.name || name;
     const idx = DASHBOARDS.findIndex(d => String(d.id) === String(id));
     if (idx >= 0) DASHBOARDS[idx] = { ...DASHBOARDS[idx], name: updatedName };
+    if (String(id) === String(ACTIVE_DASHBOARD_ID)) {
+      BRAND_NAME = updatedName;
+      applyBranding();
+      persistConfigState();
+    }
     renderDashboardAdminList();
+    renderDashboardSelect();
     setStatus('adminStatus', `Dashboard renomeado para "${updatedName}".`);
   } catch (err) {
     setStatus('adminStatus', `Erro ao renomear: ${err.message}`, true);
