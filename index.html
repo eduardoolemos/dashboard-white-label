@@ -400,7 +400,6 @@ tbody td { padding:11px 12px; font-size:13px; color:var(--text); }
 
   <div id="configScreen" style="display:none; max-width:820px; margin:40px auto;">
     <div class="config-panel">
-<<<<<<< HEAD
       <div class="config-title">Configurações</div>
       <div class="config-sub">Planilha, equipe e link compartilhável do dashboard.</div>
 
@@ -420,15 +419,6 @@ tbody td { padding:11px 12px; font-size:13px; color:var(--text); }
         </select>
         <div class="auth-status" id="dashboardStatus"></div>
       </div>
-=======
-      <div class="config-title">Configurar Planilha</div>
-      <div class="config-sub">Use uma unica planilha Google com varias abas (paginas). Para modo privado, compartilhe a planilha com o e-mail da Service Account.</div>
-      <div style="display:flex;gap:8px;margin-bottom:14px;">
-        <button type="button" class="period-tab active" id="cfgTabPlanilha" onclick="switchConfigView('planilha')">Planilha</button>
-        <button type="button" class="period-tab" id="cfgTabDashboards" onclick="switchConfigView('dashboards')">Dashboards</button>
-      </div>
-      <div id="configPlanilhaSection">
->>>>>>> 5103a19 (Add admin dashboards view with status and users modal.)
 
       <div class="config-steps">
         <div class="config-step">
@@ -523,7 +513,6 @@ tbody td { padding:11px 12px; font-size:13px; color:var(--text); }
       <div class="config-status" id="autoGidStatus"></div>
       <button class="btn-load" onclick="saveConfigAndLoad()">Carregar Dashboard →</button>
       </div>
-<<<<<<< HEAD
 
       <div id="configSectionUsers" class="config-section" style="display:none;">
         <div class="config-section-title">Gestão de usuários</div>
@@ -546,6 +535,11 @@ tbody td { padding:11px 12px; font-size:13px; color:var(--text); }
           </div>
           <div class="auth-status" id="adminStatus"></div>
         </div>
+        <div class="stage-config-wrap" style="margin-top:14px;">
+          <div class="stage-config-title">Dashboards ativos</div>
+          <div class="config-hint" style="margin-bottom:10px;">Admin visualiza todos os dashboards, status e última sincronização.</div>
+          <div id="dashboardAdminList"></div>
+        </div>
       </div>
 
       <div id="configSectionShare" class="config-section" style="display:none;">
@@ -566,15 +560,8 @@ tbody td { padding:11px 12px; font-size:13px; color:var(--text); }
         </div>
       </div>
 
-=======
-      <div id="configDashboardsSection" style="display:none;">
-        <div class="stage-config-wrap" style="margin-top:0;">
-          <div class="stage-config-title">Gestão de Dashboards</div>
-          <div class="config-hint" style="margin-bottom:10px;">Admin visualiza todos os dashboards, status e última sincronização.</div>
-          <div id="dashboardAdminList"></div>
-        </div>
-      </div>
->>>>>>> 5103a19 (Add admin dashboards view with status and users modal.)
+      <div id="configDashboardsSection" style="display:none;"></div>
+
     </div>
   </div>
 
@@ -617,7 +604,6 @@ tbody td { padding:11px 12px; font-size:13px; color:var(--text); }
     </div>
   </div>
 
-<<<<<<< HEAD
   <div id="tutorialModal" class="modal-overlay">
     <div class="tutorial-box">
       <div class="tutorial-progress" id="tutorialProgress">Passo 1 de 1</div>
@@ -634,7 +620,10 @@ tbody td { padding:11px 12px; font-size:13px; color:var(--text); }
           <button type="button" class="btn-modal-close" onclick="skipTutorial()">Pular</button>
           <button type="button" class="btn-stage-add" id="tutorialNextBtn" onclick="nextTutorialStep()">Próximo</button>
         </div>
-=======
+      </div>
+    </div>
+  </div>
+
   <div id="dashboardUsersModal" class="modal-overlay" onclick="onDashboardUsersOverlayClick(event)">
     <div class="modal-box" style="max-width:780px;">
       <div class="modal-head">
@@ -649,7 +638,6 @@ tbody td { padding:11px 12px; font-size:13px; color:var(--text); }
           <thead><tr><th>E-mail</th><th>Permissão</th><th>Status</th></tr></thead>
           <tbody id="dashboardUsersModalBody"></tbody>
         </table>
->>>>>>> 5103a19 (Add admin dashboards view with status and users modal.)
       </div>
     </div>
   </div>
@@ -2435,7 +2423,6 @@ try {
     gidConv: String(f?.[3] || ''),
     gidAds: String(f?.[4] || ''),
     defaultCampContains: String(f?.[5] || ''),
-<<<<<<< HEAD
     defaultCampMode: Array.isArray(f?.[6]) ? 'contains' : normalizePatternMode(f?.[6] || 'contains'),
     defaultCampRules: Array.isArray(f?.[6])
       ? []
@@ -2447,14 +2434,10 @@ try {
           : (Array.isArray(f?.[8]) ? unpackStages(f[8]) : DEFAULT_STAGE_CONFIGS.map(s => ({ ...s })))),
     funnelType: Array.isArray(f?.[6])
       ? String(f?.[7] || 'sessao_estrategica')
-      : String((Array.isArray(f?.[7]) && (!f[7]?.[0] || Array.isArray(f[7][0]))) ? f?.[8] : f?.[9] || 'sessao_estrategica')
-=======
-    stageConfigs: Array.isArray(f?.[6]) ? unpackStages(f[6]) : DEFAULT_STAGE_CONFIGS.map(s => ({ ...s })),
-    funnelType: String(f?.[7] || 'sessao_estrategica'),
-    isActive: Number(f?.[8]) !== 0,
-    lastSyncAt: String(f?.[9] || ''),
-    users: (() => { try { return JSON.parse(f?.[10] || '[]'); } catch { return []; } })()
->>>>>>> 5103a19 (Add admin dashboards view with status and users modal.)
+      : String((Array.isArray(f?.[7]) && (!f[7]?.[0] || Array.isArray(f[7][0]))) ? f?.[8] : f?.[9] || 'sessao_estrategica'),
+    isActive: true,
+    lastSyncAt: '',
+    users: []
   }));
 
   if (shared?.v === 2 && Array.isArray(shared?.c)) {
