@@ -456,17 +456,18 @@ app.put("/api/dashboards/:id", requireAuth, async (req, res) => {
 
     const name = String(req.body?.name || "").trim()
     const spreadsheetId = String(req.body?.spreadsheetId || "").trim()
-    const config = req.body?.config && typeof req.body.config === "object" ? req.body.config : {}
+    const hasConfig = req.body?.config !== undefined && typeof req.body.config === "object"
+    const config = hasConfig ? req.body.config : null
 
     const updated = await pool.query(
       `UPDATE dashboards
        SET name = COALESCE(NULLIF($1, ''), name),
            spreadsheet_id = COALESCE(NULLIF($2, ''), spreadsheet_id),
-           config = $3::jsonb,
+           config = CASE WHEN $3::jsonb IS NOT NULL THEN $3::jsonb ELSE config END,
            updated_at = NOW()
        WHERE id = $4
        RETURNING id, name, tenant_slug, spreadsheet_id, config, created_at, updated_at`,
-      [name, spreadsheetId, JSON.stringify(config), id]
+      [name, spreadsheetId, config !== null ? JSON.stringify(config) : null, id]
     )
     if (updated.rowCount === 0) {
       return res.status(404).json({ error: "Dashboard não encontrado." })

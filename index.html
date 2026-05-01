@@ -2700,12 +2700,16 @@ function startRenameDashboard(id, currentName) {
 async function confirmRenameDashboard(id) {
   const inp = document.getElementById(`rename-input-${id}`);
   const name = String(inp?.value || '').trim();
-  if (!name) return;
+  if (!name) { setStatus('adminStatus', 'O nome não pode ser vazio.', true); return; }
+  const saveBtn = inp?.parentElement?.querySelector('.btn-stage-add');
+  if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = 'Salvando...'; }
   try {
-    await apiRequest(`/dashboards/${id}`, { method: 'PUT', body: { name } });
+    const res = await apiRequest(`/dashboards/${id}`, { method: 'PUT', body: { name } });
+    const updatedName = res?.dashboard?.name || name;
     const idx = DASHBOARDS.findIndex(d => String(d.id) === String(id));
-    if (idx >= 0) DASHBOARDS[idx] = { ...DASHBOARDS[idx], name };
+    if (idx >= 0) DASHBOARDS[idx] = { ...DASHBOARDS[idx], name: updatedName };
     renderDashboardAdminList();
+    setStatus('adminStatus', `Dashboard renomeado para "${updatedName}".`);
   } catch (err) {
     setStatus('adminStatus', `Erro ao renomear: ${err.message}`, true);
     renderDashboardAdminList();
