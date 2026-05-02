@@ -6,6 +6,7 @@ import jwt from "jsonwebtoken"
 import path from "node:path"
 import pg from "pg"
 import { fileURLToPath } from "node:url"
+import axios from "axios"
 
 dotenv.config()
 
@@ -651,6 +652,196 @@ app.get("/api/sheets/csv", async (req, res) => {
     })
   }
 })
+
+// ─── INTEGRAÇÃO KOMMO ────────────────────────────────────────────────────────
+
+app.post("/api/kommo/pipelines", async (req, res) => {
+  const { domain, token } = req.body
+  try {
+    const { data } = await axios.get(
+      `https://${domain}/api/v4/leads/pipelines?limit=50`,
+      { headers: { Authorization: `Bearer ${token}` } }
+    )
+    res.json(data._embedded?.pipelines || [])
+  } catch (e) {
+    res.status(400).json({ error: e.response?.data || e.message })
+  }
+})
+
+app.post("/api/kommo/n8n/workflows", async (req, res) => {
+  const { n8nUrl, n8nApiKey } = req.body
+  try {
+    const { data } = await axios.get(`${n8nUrl}/api/v1/workflows`, {
+      headers: { "X-N8N-API-KEY": n8nApiKey },
+    })
+    res.json(data.data || [])
+  } catch (e) {
+    res.status(400).json({ error: e.response?.data || e.message })
+  }
+})
+
+app.post("/api/kommo/n8n/create-workflow", async (req, res) => {
+  const { n8nUrl, n8nApiKey, workflowName, stages, kommo, sheets } = req.body
+  const backendPublicUrl = (process.env.BACKEND_PUBLIC_URL || `http://134.195.90.244:${process.env.PORT || 3000}`).replace(/\/+$/, "")
+  const stageNodeName = (prefix, s) => `${prefix}: ${s.name} [${s.status_id}]`
+
+  const triggerNode = {
+    id: "trigger-1", name: "Kommo Webhook Trigger", type: "n8n-nodes-base.webhook",
+    typeVersion: 2, position: [240, 300], webhookId: crypto.randomUUID(),
+    parameters: { httpMethod: "POST", path: "kommo-stage-change", responseMode: "onReceived", responseData: "allEntries" },
+  }
+
+  const enrichNode = {
+    id: "enrich-1", name: "Enriquecer Lead", type: "n8n-nodes-base.code",
+    typeVersion: 2, position: [480, 300],
+    parameters: {
+      jsCode: `
+const body = $input.first().json.body || {};
+const lead_id = body['leads[status][0][id]'];
+const status_id = body['leads[status][0][status_id]'];
+const old_status_id = body['leads[status][0][old_status_id]'];
+const pipeline_id = body['leads[status][0][pipeline_id]'];
+const price = body['leads[status][0][price]'];
+const responsible = body['leads[status][0][responsible_user_id]'];
+const account_sub = body['account[subdomain]'];
+const account_id = body['account[id]'];
+const tags = [];
+let t = 0;
+while (body[\`leads[status][0][tags][\${t}][name]\`]) { tags.push(body[\`leads[status][0][tags][\${t}][name]\`]); t++; }
+const kommoToken = '${kommo?.token || ""}';
+const kommoDomain = '${kommo?.domain || ""}';
+const leadRes = await this.helpers.httpRequest({ method: 'GET', url: \`https://\${kommoDomain}/api/v4/leads/\${lead_id}?with=contacts,tags,custom_fields_values\`, headers: { Authorization: \`Bearer \${kommoToken}\` } });
+function parseCustomFields(arr) { const obj = {}; if (!Array.isArray(arr)) return obj; for (const cf of arr) { const key = cf.field_name || String(cf.field_id); obj[key] = cf.values?.[0]?.value ?? null; } return obj; }
+const leadCustomFields = parseCustomFields(leadRes.custom_fields_values);
+const contacts = leadRes._embedded?.contacts || [];
+let contactCustomFields = {}, contactName = '', contactPhone = '', contactEmail = '';
+if (contacts.length > 0) {
+  const mainContact = contacts.find(c => c.is_main) || contacts[0];
+  const contactRes = await this.helpers.httpRequest({ method: 'GET', url: \`https://\${kommoDomain}/api/v4/contacts/\${mainContact.id}?with=custom_fields_values\`, headers: { Authorization: \`Bearer \${kommoToken}\` } });
+  contactName = contactRes.name || '';
+  contactCustomFields = parseCustomFields(contactRes.custom_fields_values);
+  for (const cf of (contactRes.custom_fields_values || [])) { if (cf.field_code === 'PHONE') contactPhone = cf.values?.[0]?.value || ''; if (cf.field_code === 'EMAIL') contactEmail = cf.values?.[0]?.value || ''; }
+}
+const FIXED_KEYS = new Set(['Phone','Email','etapa_atual_id','etapa_anterior_id','pipeline_id','account_subdomain','account_id','lead_id','lead_name','lead_price','responsible_user_id','tags','contato_nome','contato_telefone','contato_email','utm_campaign','utm_source','utm_medium','utm_content','utm_term','fbclid']);
+const allCustom = { ...leadCustomFields, ...contactCustomFields };
+const dynamicFields = {};
+for (const [k, v] of Object.entries(allCustom)) { if (!FIXED_KEYS.has(k)) dynamicFields[k] = v; }
+return [{ json: { etapa_atual_id: status_id, etapa_anterior_id: old_status_id, pipeline_id, account_subdomain: account_sub, account_id, lead_id, lead_name: leadRes.name || '', lead_price: price, responsible_user_id: responsible, tags, contato_nome: contactName, contato_telefone: contactPhone, contato_email: contactEmail, utm_campaign: allCustom['utm_campaign'] ?? null, utm_source: allCustom['utm_source'] ?? null, utm_medium: allCustom['utm_medium'] ?? null, utm_content: allCustom['utm_content'] ?? null, utm_term: allCustom['utm_term'] ?? null, fbclid: allCustom['fbclid'] ?? null, _dynamic: dynamicFields } }];
+`    },
+  }
+
+  const sheetsNodes = stages.map((s, i) => ({
+    id: `sheets-${i}`, name: stageNodeName("Planilha", s), type: "n8n-nodes-base.code",
+    typeVersion: 2, position: [1240, 100 + i * 200],
+    parameters: { jsCode: `const d = $input.first().json; const backendUrl = '${backendPublicUrl}'; const rawSheet = '${sheets?.spreadsheetId || ""}'; const sheetId = rawSheet.includes('/d/') ? (rawSheet.match(/\\/d\\/([a-zA-Z0-9-_]+)/)?.[1] || rawSheet) : rawSheet; const tabName = '${s.name}'; const dynamic = d._dynamic || {}; const dynamicValues = Object.values(dynamic); const dynamicHeaders = Object.keys(dynamic); const now = new Date(); const data = [now.toLocaleDateString('pt-BR'), d.contato_nome || d.lead_name || '', d.contato_telefone || '', d.contato_email || '', d.utm_campaign || '', d.utm_source || '', d.utm_medium || '', d.utm_content || '', d.utm_term || '', d.fbclid || '', ...dynamicValues, 1]; const headers = ['Data','Nome','Telefone','Email','utm_campaign','utm_source','utm_medium','utm_content','utm_term','fbclid',...dynamicHeaders,'Contagem']; await this.helpers.httpRequest({ method: 'POST', url: \`\${backendUrl}/api/kommo/sheets/append\`, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sheetId, tabName, headers, row: data }) }); return [$input.first()];` },
+  }))
+
+  const ifNodes = stages.map((s, i) => ({
+    id: `if-${i}`, name: stageNodeName("Checar", s), type: "n8n-nodes-base.if",
+    typeVersion: 2, position: [760, 100 + i * 200],
+    parameters: { conditions: { options: { caseSensitive: true, leftValue: "", typeValidation: "strict" }, combinator: "and", conditions: [{ id: `cond-${i}`, leftValue: "={{ $json.etapa_atual_id }}", rightValue: String(s.status_id), operator: { type: "string", operation: "equals" } }] } },
+  }))
+
+  const setNodes = stages.map((s, i) => ({
+    id: `set-${i}`, name: stageNodeName("Etapa", s), type: "n8n-nodes-base.set",
+    typeVersion: 3, position: [1000, 100 + i * 200],
+    parameters: { mode: "raw", jsonOutput: `{"etapa_nome":"${s.name}","pipeline_nome":"${s.pipeline}"}`, includeOtherFields: true },
+  }))
+
+  const fallbackNode = { id: "fallback-1", name: "Etapa não mapeada", type: "n8n-nodes-base.noOp", typeVersion: 1, position: [1000, 100 + stages.length * 200], parameters: {} }
+
+  const connections = {
+    [triggerNode.name]: { main: [[{ node: enrichNode.name, type: "main", index: 0 }]] },
+    [enrichNode.name]: { main: [[{ node: ifNodes[0].name, type: "main", index: 0 }]] },
+  }
+  ifNodes.forEach((ifNode, i) => {
+    connections[ifNode.name] = { main: [[{ node: setNodes[i].name, type: "main", index: 0 }], i < ifNodes.length - 1 ? [{ node: ifNodes[i + 1].name, type: "main", index: 0 }] : [{ node: fallbackNode.name, type: "main", index: 0 }]] }
+    connections[setNodes[i].name] = { main: [[{ node: sheetsNodes[i].name, type: "main", index: 0 }]] }
+  })
+
+  const workflow = { name: workflowName || "Kommo Stage Router", nodes: [triggerNode, enrichNode, ...ifNodes, ...setNodes, ...sheetsNodes, fallbackNode], connections, settings: { executionOrder: "v1" } }
+
+  try {
+    const { data } = await axios.post(`${n8nUrl}/api/v1/workflows`, workflow, { headers: { "X-N8N-API-KEY": n8nApiKey, "Content-Type": "application/json" } })
+    await axios.post(`${n8nUrl}/api/v1/workflows/${data.id}/activate`, {}, { headers: { "X-N8N-API-KEY": n8nApiKey } })
+    const webhookUrl = `${n8nUrl}/webhook/kommo-stage-change`
+    if (kommo?.domain && kommo?.token) {
+      await axios.post(`https://${kommo.domain}/api/v4/webhooks`, { destination: webhookUrl, settings: ["status_lead"] }, { headers: { Authorization: `Bearer ${kommo.token}` } })
+    }
+    res.json({ workflowId: data.id, workflowUrl: `${n8nUrl}/workflow/${data.id}`, webhookUrl })
+  } catch (e) {
+    res.status(400).json({ error: e.response?.data || e.message })
+  }
+})
+
+app.post("/api/kommo/sheets/append", async (req, res) => {
+  const { sheetId, tabName, headers, row } = req.body
+  try {
+    const keyRaw = process.env.GOOGLE_SERVICE_ACCOUNT_KEY
+    if (!keyRaw) throw new Error("GOOGLE_SERVICE_ACCOUNT_KEY não configurado")
+    const key = JSON.parse(keyRaw)
+    const auth = new google.auth.GoogleAuth({ credentials: key, scopes: ["https://www.googleapis.com/auth/drive", "https://www.googleapis.com/auth/spreadsheets"] })
+    const sheets = google.sheets({ version: "v4", auth })
+    const meta = await sheets.spreadsheets.get({ spreadsheetId: sheetId })
+    const existing = meta.data.sheets.map(s => s.properties.title)
+    if (!existing.includes(tabName)) {
+      await sheets.spreadsheets.batchUpdate({ spreadsheetId: sheetId, requestBody: { requests: [{ addSheet: { properties: { title: tabName } } }] } })
+      await sheets.spreadsheets.values.append({ spreadsheetId: sheetId, range: `${tabName}!A1`, valueInputOption: "USER_ENTERED", requestBody: { values: [headers] } })
+    }
+    await sheets.spreadsheets.values.append({ spreadsheetId: sheetId, range: `${tabName}!A1`, valueInputOption: "USER_ENTERED", requestBody: { values: [row] } })
+    res.json({ ok: true })
+  } catch (e) {
+    res.status(400).json({ error: e.message })
+  }
+})
+
+app.post("/api/kommo/sheets/create", async (req, res) => {
+  const { folderId, sheetName } = req.body
+  try {
+    const keyRaw = process.env.GOOGLE_SERVICE_ACCOUNT_KEY
+    if (!keyRaw) throw new Error("GOOGLE_SERVICE_ACCOUNT_KEY não configurado")
+    const key = JSON.parse(keyRaw)
+    const auth = new google.auth.GoogleAuth({ credentials: key, scopes: ["https://www.googleapis.com/auth/drive", "https://www.googleapis.com/auth/spreadsheets"] })
+    const drive = google.drive({ version: "v3", auth })
+    const { data } = await drive.files.create({ requestBody: { name: sheetName, mimeType: "application/vnd.google-apps.spreadsheet", parents: [folderId] }, fields: "id, name, webViewLink", supportsAllDrives: true })
+    res.json({ id: data.id, name: data.name, url: data.webViewLink })
+  } catch (e) {
+    res.status(400).json({ error: e.message })
+  }
+})
+
+app.post("/api/kommo/drive/folders", async (req, res) => {
+  const { folderId } = req.body
+  try {
+    const keyRaw = process.env.GOOGLE_SERVICE_ACCOUNT_KEY
+    if (!keyRaw) throw new Error("GOOGLE_SERVICE_ACCOUNT_KEY não configurado")
+    const key = JSON.parse(keyRaw)
+    const auth = new google.auth.GoogleAuth({ credentials: key, scopes: ["https://www.googleapis.com/auth/drive"] })
+    const drive = google.drive({ version: "v3", auth })
+    const parent = folderId === "root" ? "root" : folderId
+    const { data } = await drive.files.list({ q: `'${parent}' in parents and mimeType = 'application/vnd.google-apps.folder' and trashed = false`, fields: "files(id, name)", orderBy: "name", pageSize: 100, includeItemsFromAllDrives: true, supportsAllDrives: true })
+    res.json(data.files || [])
+  } catch (e) {
+    res.status(400).json({ error: e.message })
+  }
+})
+
+app.get("/api/kommo/defaults", (req, res) => {
+  res.json({
+    n8nUrl: process.env.N8N_URL || "",
+    n8nApiKey: process.env.N8N_API_KEY || "",
+    sheetName: process.env.GOOGLE_SHEET_NAME || "",
+    folderId: process.env.GOOGLE_DRIVE_FOLDER_ID || "",
+  })
+})
+
+// ─── KOMMO: serve frontend estático ──────────────────────────────────────────
+app.use("/admin/integracao-kommo", express.static(path.join(__dirname, "kommo-dist")))
+app.get("/admin/integracao-kommo/*", (req, res) => {
+  res.sendFile(path.join(__dirname, "kommo-dist", "index.html"))
+})
+
+// ─────────────────────────────────────────────────────────────────────────────
 
 app.use(express.static(__dirname))
 
