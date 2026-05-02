@@ -653,6 +653,28 @@ app.get("/api/sheets/csv", async (req, res) => {
   }
 })
 
+// ─── GOOGLE AUTH HELPER ──────────────────────────────────────────────────────
+
+function getGoogleCredentials() {
+  const raw = process.env.GOOGLE_SERVICE_ACCOUNT_KEY
+  if (!raw) throw new Error("GOOGLE_SERVICE_ACCOUNT_KEY não configurado")
+  try {
+    return JSON.parse(raw)
+  } catch {
+    // tenta base64
+    try {
+      return JSON.parse(Buffer.from(raw, "base64").toString("utf8"))
+    } catch {
+      throw new Error("GOOGLE_SERVICE_ACCOUNT_KEY inválido (esperado JSON ou base64)")
+    }
+  }
+}
+
+function getGoogleAuth(scopes) {
+  const credentials = getGoogleCredentials()
+  return new google.auth.GoogleAuth({ credentials, scopes })
+}
+
 // ─── INTEGRAÇÃO KOMMO ────────────────────────────────────────────────────────
 
 app.post("/api/kommo/pipelines", async (req, res) => {
@@ -777,10 +799,7 @@ return [{ json: { etapa_atual_id: status_id, etapa_anterior_id: old_status_id, p
 app.post("/api/kommo/sheets/append", async (req, res) => {
   const { sheetId, tabName, headers, row } = req.body
   try {
-    const keyRaw = process.env.GOOGLE_SERVICE_ACCOUNT_KEY
-    if (!keyRaw) throw new Error("GOOGLE_SERVICE_ACCOUNT_KEY não configurado")
-    const key = JSON.parse(keyRaw)
-    const auth = new google.auth.GoogleAuth({ credentials: key, scopes: ["https://www.googleapis.com/auth/drive", "https://www.googleapis.com/auth/spreadsheets"] })
+    const auth = getGoogleAuth(["https://www.googleapis.com/auth/drive", "https://www.googleapis.com/auth/spreadsheets"])
     const sheets = google.sheets({ version: "v4", auth })
     const meta = await sheets.spreadsheets.get({ spreadsheetId: sheetId })
     const existing = meta.data.sheets.map(s => s.properties.title)
@@ -798,10 +817,7 @@ app.post("/api/kommo/sheets/append", async (req, res) => {
 app.post("/api/kommo/sheets/create", async (req, res) => {
   const { folderId, sheetName } = req.body
   try {
-    const keyRaw = process.env.GOOGLE_SERVICE_ACCOUNT_KEY
-    if (!keyRaw) throw new Error("GOOGLE_SERVICE_ACCOUNT_KEY não configurado")
-    const key = JSON.parse(keyRaw)
-    const auth = new google.auth.GoogleAuth({ credentials: key, scopes: ["https://www.googleapis.com/auth/drive", "https://www.googleapis.com/auth/spreadsheets"] })
+    const auth = getGoogleAuth(["https://www.googleapis.com/auth/drive", "https://www.googleapis.com/auth/spreadsheets"])
     const drive = google.drive({ version: "v3", auth })
     const { data } = await drive.files.create({ requestBody: { name: sheetName, mimeType: "application/vnd.google-apps.spreadsheet", parents: [folderId] }, fields: "id, name, webViewLink", supportsAllDrives: true })
     res.json({ id: data.id, name: data.name, url: data.webViewLink })
@@ -813,10 +829,7 @@ app.post("/api/kommo/sheets/create", async (req, res) => {
 app.post("/api/kommo/drive/folders", async (req, res) => {
   const { folderId } = req.body
   try {
-    const keyRaw = process.env.GOOGLE_SERVICE_ACCOUNT_KEY
-    if (!keyRaw) throw new Error("GOOGLE_SERVICE_ACCOUNT_KEY não configurado")
-    const key = JSON.parse(keyRaw)
-    const auth = new google.auth.GoogleAuth({ credentials: key, scopes: ["https://www.googleapis.com/auth/drive"] })
+    const auth = getGoogleAuth(["https://www.googleapis.com/auth/drive"])
     const drive = google.drive({ version: "v3", auth })
     const parent = folderId === "root" ? "root" : folderId
     const { data } = await drive.files.list({ q: `'${parent}' in parents and mimeType = 'application/vnd.google-apps.folder' and trashed = false`, fields: "files(id, name)", orderBy: "name", pageSize: 100, includeItemsFromAllDrives: true, supportsAllDrives: true })
