@@ -440,6 +440,11 @@ tbody td { padding:11px 12px; font-size:13px; color:var(--text); }
             <div class="auth-status" id="dashboardStatus"></div>
           </div>
           <button class="btn-load" style="margin-top:20px;" onclick="saveConfigAndLoad()">Carregar Dashboard →</button>
+          <div id="dashboardAdminListWrap" style="display:none;margin-top:28px;">
+            <div class="stage-config-title">Todos os dashboards</div>
+            <div class="config-hint" style="margin-bottom:10px;">Clique em um dashboard para selecionar e editar suas configurações.</div>
+            <div id="dashboardAdminList"></div>
+          </div>
         </div>
 
         <!-- SECTION: Planilha -->
@@ -589,11 +594,7 @@ tbody td { padding:11px 12px; font-size:13px; color:var(--text); }
             </div>
             <div class="auth-status" id="adminStatus"></div>
           </div>
-          <div class="stage-config-wrap" style="margin-top:14px;">
-            <div class="stage-config-title">Dashboards ativos</div>
-            <div class="config-hint" style="margin-bottom:10px;">Admin visualiza todos os dashboards, status e última sincronização.</div>
-            <div id="dashboardAdminList"></div>
-          </div>
+          <div class="config-hint" style="margin-top:12px;color:var(--teal);">Após criar, vá para a seção Dashboard para ver a lista atualizada.</div>
         </div>
 
         <!-- SECTION: Link -->
@@ -1504,6 +1505,8 @@ function updateConfigSubnavForRole() {
   const isAdmin = getRole() === 'super_admin';
   const navUsers = document.getElementById('wpNav_users');
   if (navUsers) navUsers.style.display = isAdmin ? '' : 'none';
+  const wrap = document.getElementById('dashboardAdminListWrap');
+  if (wrap) wrap.style.display = (isAdmin && currentConfigSection === 'dashboard') ? 'block' : 'none';
   if (!isAdmin && currentConfigSection === 'users') {
     setConfigSection('dashboard', { skipStorage: true });
   }
@@ -1526,6 +1529,11 @@ function setConfigSection(rawKey, opts = {}) {
   });
 
   if (effective === 'link') refreshShareLinkPreview();
+  if (effective === 'dashboard') {
+    const wrap = document.getElementById('dashboardAdminListWrap');
+    if (wrap) wrap.style.display = isAdmin ? 'block' : 'none';
+    if (isAdmin) renderDashboardAdminList();
+  }
 }
 
 function apiPath(path) {
@@ -1832,7 +1840,8 @@ function applyTenantFromInput(syncUrl = false) {
 }
 
 function applyBranding() {
-  const name = String(BRAND_NAME || '').trim() || 'Evolving';
+  const isAdmin = getRole() === 'super_admin';
+  const name = isAdmin ? 'Admin' : (String(BRAND_NAME || '').trim() || 'Evolving');
   const header = document.getElementById('brandNameHeader');
   if (header) header.textContent = name.toLowerCase();
   document.title = `${name} — Dashboard`;
