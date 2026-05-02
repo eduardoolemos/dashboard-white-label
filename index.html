@@ -1254,6 +1254,7 @@ async function submitPasswordChange() {
 }
 
 async function continueSessionAfterLogin() {
+  clearCfgHash();
   updateHeaderAuthUi();
   applyRoleUi();
   const isAdminPath = window.location.pathname.replace(/^\/+/, '') === 'admin';
@@ -2236,16 +2237,16 @@ function readSharedCfgFromUrl() {
   return null;
 }
 
-function writeSharedCfgToUrl(payload) {
-  try {
-    const encoded = encodeShareCfg(payload);
-    if (!encoded) return;
-    const u = new URL(window.location.href);
-    u.searchParams.delete('cfg');
-    u.hash = `cfg=${encoded}`;
-    window.history.replaceState({}, '', u.toString());
-  } catch {}
+function writeSharedCfgToUrl(_payload) {
   if (currentConfigSection === 'share') refreshShareLinkPreview();
+}
+
+function clearCfgHash() {
+  try {
+    if (window.location.hash.startsWith('#cfg=')) {
+      window.history.replaceState({}, '', window.location.pathname);
+    }
+  } catch {}
 }
 
 async function copyToClipboard(text) {
@@ -6202,6 +6203,7 @@ async function bootstrapAuth() {
       document.getElementById('loadingScreen').style.display = 'none';
       return;
     }
+    clearCfgHash();
     showAppShell();
     updateHeaderAuthUi();
     applyRoleUi();
