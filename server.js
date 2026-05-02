@@ -677,6 +677,28 @@ function getGoogleAuth(scopes) {
 
 // ─── INTEGRAÇÃO KOMMO ────────────────────────────────────────────────────────
 
+app.get("/api/kommo/debug", (req, res) => {
+  const raw = process.env.GOOGLE_SERVICE_ACCOUNT_KEY || ""
+  let status = "não configurado"
+  let email = null
+  if (raw) {
+    try {
+      const parsed = JSON.parse(raw)
+      status = "JSON válido"
+      email = parsed.client_email
+    } catch {
+      try {
+        const parsed = JSON.parse(Buffer.from(raw, "base64").toString("utf8"))
+        status = "base64 válido"
+        email = parsed.client_email
+      } catch {
+        status = "inválido (nem JSON nem base64)"
+      }
+    }
+  }
+  res.json({ status, email, keyLength: raw.length })
+})
+
 app.post("/api/kommo/pipelines", async (req, res) => {
   const { domain, token } = req.body
   try {
