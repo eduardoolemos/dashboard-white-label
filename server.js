@@ -707,10 +707,14 @@ app.post("/api/kommo/n8n/create-workflow", async (req, res) => {
   const backendPublicUrl = (process.env.BACKEND_PUBLIC_URL || `http://134.195.90.244:${process.env.PORT || 3000}`).replace(/\/+$/, "")
   const stageNodeName = (prefix, s) => `${prefix}: ${s.name} [${s.status_id}]`
 
+  // webhook path único por cliente baseado no subdomínio do Kommo
+  const kommoSubdomain = String(kommo?.domain || "").split(".")[0].toLowerCase().replace(/[^a-z0-9-]/g, "") || "cliente"
+  const webhookPath = `${kommoSubdomain}-n8n-kommo-arven`
+
   const triggerNode = {
     id: "trigger-1", name: "Kommo Webhook Trigger", type: "n8n-nodes-base.webhook",
     typeVersion: 2, position: [240, 300], webhookId: crypto.randomUUID(),
-    parameters: { httpMethod: "POST", path: "kommo-stage-change", responseMode: "onReceived", responseData: "allEntries" },
+    parameters: { httpMethod: "POST", path: webhookPath, responseMode: "onReceived", responseData: "allEntries" },
   }
 
   const enrichNode = {
@@ -786,7 +790,7 @@ return [{ json: { etapa_atual_id: status_id, etapa_anterior_id: old_status_id, p
   try {
     const { data } = await axios.post(`${n8nUrl}/api/v1/workflows`, workflow, { headers: { "X-N8N-API-KEY": n8nApiKey, "Content-Type": "application/json" } })
     await axios.post(`${n8nUrl}/api/v1/workflows/${data.id}/activate`, {}, { headers: { "X-N8N-API-KEY": n8nApiKey } })
-    const webhookUrl = `${n8nUrl}/webhook/kommo-stage-change`
+    const webhookUrl = `${n8nUrl}/webhook/${webhookPath}`
     if (kommo?.domain && kommo?.token) {
       await axios.post(`https://${kommo.domain}/api/v4/webhooks`, { destination: webhookUrl, settings: ["status_lead"] }, { headers: { Authorization: `Bearer ${kommo.token}` } })
     }
