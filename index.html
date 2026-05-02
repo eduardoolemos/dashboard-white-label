@@ -1145,10 +1145,22 @@ function normalizeClientKey(v) {
 function getTenantFromUrl() {
   try {
     const qp = new URLSearchParams(window.location.search);
-    return normalizeClientKey(qp.get('tenant') || DEFAULT_TENANT_KEY);
+    if (qp.get('tenant')) return normalizeClientKey(qp.get('tenant'));
+    const slug = window.location.pathname.replace(/^\/+/, '').split('/')[0];
+    if (slug && slug !== 'admin') return normalizeClientKey(slug);
+    return DEFAULT_TENANT_KEY;
   } catch {
     return DEFAULT_TENANT_KEY;
   }
+}
+
+function updateUrlToSlug(slug) {
+  try {
+    const clean = '/' + String(slug || '').toLowerCase().replace(/[^a-z0-9-]/g, '-');
+    if (window.location.pathname !== clean) {
+      history.replaceState(null, '', clean);
+    }
+  } catch {}
 }
 
 function getCfgKey() {
@@ -1244,13 +1256,20 @@ async function submitPasswordChange() {
 async function continueSessionAfterLogin() {
   updateHeaderAuthUi();
   applyRoleUi();
-  setConfigSection(loadStoredConfigSection(), { skipStorage: true });
+  const isAdminPath = window.location.pathname.replace(/^\/+/, '') === 'admin';
+  if (isAdminPath && getRole() === 'super_admin') {
+    setConfigSection('users', { skipStorage: true });
+    switchTab('config');
+  } else {
+    setConfigSection(loadStoredConfigSection(), { skipStorage: true });
+  }
   setStatus('authStatus', `Autenticado como ${AUTH_USER?.email || ''}`);
   await refreshDashboards();
   const tenant = getTenantFromUrl();
   const matched = DASHBOARDS.find((d) => normalizeClientKey(d.tenant_slug) === tenant) || DASHBOARDS[0];
   if (matched) {
     ACTIVE_DASHBOARD_ID = String(matched.id);
+    updateUrlToSlug(matched.tenant_slug);
     renderDashboardSelect();
     await onDashboardSelectionChange();
     maybeShowTutorialOnLogin();
@@ -6186,6 +6205,11 @@ async function bootstrapAuth() {
     showAppShell();
     updateHeaderAuthUi();
     applyRoleUi();
+    const isAdminPath = window.location.pathname.replace(/^\/+/, '') === 'admin';
+    if (isAdminPath && AUTH_USER?.role === 'super_admin') {
+      setConfigSection('users', { skipStorage: true });
+      switchTab('config');
+    }
     await refreshDashboards();
     const tenant = getTenantFromUrl();
     const matched = DASHBOARDS.find((d) => normalizeClientKey(d.tenant_slug) === tenant) || DASHBOARDS[0];
@@ -6196,6 +6220,7 @@ async function bootstrapAuth() {
       return;
     }
     ACTIVE_DASHBOARD_ID = String(matched.id);
+    if (!isAdminPath) updateUrlToSlug(matched.tenant_slug);
     renderDashboardSelect();
     await onDashboardSelectionChange();
     maybeShowTutorialOnLogin();
